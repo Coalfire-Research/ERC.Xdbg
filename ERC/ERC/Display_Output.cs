@@ -374,6 +374,25 @@ namespace ERC
         }
         #endregion
 
+        #region GenerateModuleInfoTable
+        /// <summary>
+        /// Aquires filename and writes out all module data to the current working directory. Requires a Process_Info object to be passed as a parameter.
+        /// </summary>
+        /// <param name="info">The ProcessInfo object of which the module information will be displayed</param>
+        /// <param name="outputToFile">Set to false to surpress file output.</param>
+        /// <returns>Returns a formatted string of all results</returns>
+        public static string GenerateModuleInfoTable(ProcessInfo info, bool outputToFile = true)
+        {
+            string modOutput = DisplayModuleInfo(info);
+            string modFilename = GetFilePath(info.WorkingDirectory, "modules_", ".txt");
+            if(outputToFile == true)
+            {
+                File.WriteAllText(modFilename, modOutput);
+            }
+            return modOutput;
+        }
+        #endregion
+
         #region SearhMemory
         /// <summary>
         /// Searches the memory of a process and it's loaded modules for a string or byte combination.
@@ -388,8 +407,8 @@ namespace ERC
         /// <param name="osdll">Remove OS Dlls.</param>
         /// <param name="unwantedBytes">Addresses containing values in this byte array will be ignored.</param>
         /// <returns></returns>
-        public static List<string> SearchMemory(ProcessInfo info, int searchType, string searchString, bool aslr = false,
-            bool safeseh = false, bool rebase = false, bool nxcompat = false, bool osdll = false,
+        public static List<string> SearchMemory(ProcessInfo info, int searchType, string searchString, bool aslr = false, 
+            bool safeseh = false, bool rebase = false, bool nxcompat = false, bool osdll = false, 
             byte[] unwantedBytes = null)
         {
             List<string> excludedModules = info.CreateExcludesList(aslr, safeseh, rebase, nxcompat, osdll);
@@ -405,7 +424,7 @@ namespace ERC
                 results = info.SearchMemory(searchType, null, searchString, excludedModules).ReturnValue;
             }
 
-            if (unwantedBytes != null)
+            if(unwantedBytes != null)
             {
                 results = ERC.Utilities.PtrRemover.RemovePointers(results, unwantedBytes);
             }
@@ -453,25 +472,6 @@ namespace ERC
         }
         #endregion
 
-        #region GenerateModuleInfoTable
-        /// <summary>
-        /// Aquires filename and writes out all module data to the current working directory. Requires a Process_Info object to be passed as a parameter.
-        /// </summary>
-        /// <param name="info">The ProcessInfo object of which the module information will be displayed</param>
-        /// <param name="outputToFile">Set to false to surpress file output.</param>
-        /// <returns>Returns a formatted string of all results</returns>
-        public static string GenerateModuleInfoTable(ProcessInfo info, bool outputToFile = true)
-        {
-            string modOutput = DisplayModuleInfo(info);
-            string modFilename = GetFilePath(info.WorkingDirectory, "modules_", ".txt");
-            if(outputToFile == true)
-            {
-                File.WriteAllText(modFilename, modOutput);
-            }
-            return modOutput;
-        }
-        #endregion
-
         #region GetSEHJumps
         /// <summary>
         /// Searches all memory associated with a given process and associated modules for POP X POP X RET instructions. 
@@ -479,13 +479,38 @@ namespace ERC
         /// Similar to Search_All_Memory_PPR however provides output in an easily readable format.
         /// </summary>
         /// <param name="info">The ProcessInfo object which will be searched for POP POP RET instructions.</param>
-        /// <param name="excludes">Modules to be ignored when searching for the instruction sets.</param>
+        /// <param name="aslr">Remove ASLR libraries.</param>
+        /// <param name="safeseh">Remove SafeSEH libraries.</param>
+        /// <param name="rebase">Remove rebasable libraries.</param>
+        /// <param name="nxcompat">Remove NXCompat libraries.</param>
+        /// <param name="osdll">Remove OS Dlls.</param>
+        /// <param name="unwantedBytes">Addresses containing values in this byte array will be ignored.</param>
         /// <returns>Returns an ErcResult containing a list of strings detailing the pointers, opcodes and base files of suitable instruction sets.</returns>
-        public static List<string> GetSEHJumps(ProcessInfo info, List<string> excludes = null)
+        public static List<string> GetSEHJumps(ProcessInfo info, bool aslr = false,
+            bool safeseh = false, bool rebase = false, bool nxcompat = false, bool osdll = false,
+            byte[] unwantedBytes = null)
         {
             List<string> ret = new List<string>();
-            //ret = new List<string>();
-            ErcResult<Dictionary<IntPtr, string>> ptrs = info.SearchAllMemoryPPR(excludes);
+            List<string> excludedModules = info.CreateExcludesList(aslr, safeseh, rebase, nxcompat, osdll);
+            ErcResult<Dictionary<IntPtr, string>> ptrs = info.SearchAllMemoryPPR(excludedModules);
+
+            if (unwantedBytes != null)
+            {
+                List<IntPtr> p = new List<IntPtr>();
+                foreach (KeyValuePair<IntPtr, string> k in ptrs.ReturnValue)
+                {
+                    p.Add(k.Key);
+                }
+                var pt = ERC.Utilities.PtrRemover.RemovePointers(p, unwantedBytes);
+
+                foreach (KeyValuePair<IntPtr, string> k in ptrs.ReturnValue.ToList())
+                {
+                    if (!pt.Contains(k.Key))
+                    {
+                        ptrs.ReturnValue.Remove(k.Key);
+                    }
+                }
+            }
 
             string sehFilename = GetFilePath(info.WorkingDirectory, "SEH_jumps_", ".txt");
             ret.Add("---------------------------------------------------------------------------------------");
@@ -685,7 +710,7 @@ namespace ERC
             fs1.Close();
 
             string outputString = "---------------------------------------------------------------------------------------" + Environment.NewLine;
-            if (unwantedBytes != null)
+            if(unwantedBytes != null)
             {
                 outputString += "Byte Array generated at:" + DateTime.Now + "  Omitted values: " + BitConverter.ToString(unwantedBytes).Replace("-", ", ") + Environment.NewLine;
             }
@@ -699,13 +724,13 @@ namespace ERC
 
             string raw = "\\x" + BitConverter.ToString(byteArray).Replace("-", "\\x");
             string formattedHex = "";
-            for (int i = 0; i < raw.Length; i++)
+            for(int i = 0; i < raw.Length; i++)
             {
-                if (i == 0)
+                if(i == 0)
                 {
                     formattedHex += raw[i];
                 }
-                else if (i % 48 == 0)
+                else if(i % 48 == 0)
                 {
                     formattedHex += "\n" + raw[i];
                 }
@@ -713,6 +738,7 @@ namespace ERC
                 {
                     formattedHex += raw[i];
                 }
+                
             }
 
             outputString += formattedHex;
@@ -722,14 +748,14 @@ namespace ERC
             string CSharpTemp = "0x" + BitConverter.ToString(byteArray).Replace("-", ", 0x");
             string CSharpFormatted = "";
             int counter = 0;
-            for (int i = 0; i < CSharpTemp.Length; i++)
+            for(int i = 0; i < CSharpTemp.Length; i++)
             {
-                if (i == 0)
+                if(i == 0)
                 {
                     CSharpFormatted += "    " + CSharpTemp[i];
                     counter++;
                 }
-                else if (CSharpTemp[i] == ',' && counter % 8 == 0 && counter != 0)
+                else if(CSharpTemp[i] == ',' && counter % 8 == 0 && counter != 0)
                 {
                     CSharpFormatted += CSharpTemp[i] + "\n    ";
                     i++;
@@ -770,9 +796,9 @@ namespace ERC
             string fromRegion = "From Memory Region | "; 
             ErcCore.ReadProcessMemory(info.ProcessHandle, startAddress, memoryRegion, byteArray.Length, out bytesRead);
             int counter = 0;
-            for(int i = 0; i < byteArray.Length; i++)
+            for(int i = 0; i <= byteArray.Length; i++)
             {
-                if(i == byteArray.Length)
+                if (i == byteArray.Length)
                 {
                     counter = 0;
                     fromArray += " | ";
@@ -2302,6 +2328,64 @@ namespace ERC
                              .Where(x => x % 2 == 0)
                              .Select(x => System.Convert.ToByte(hex.Substring(x, 2), 16))
                              .ToArray();
+        }
+        #endregion
+
+        #region Dump Memory
+        /// <summary>
+        /// Reads a set of bytes from process memory and provides a string contianing the results.
+        /// </summary>
+        /// <param name="info">ProcessInfo object</param>
+        /// <param name="startAddress">The address to start reading from.</param>
+        /// <param name="length">The number of bytes to read.</param>
+        /// <returns>A string containing the bytes read from memroy</returns>
+        public static ErcResult<string> DumpMemory(ProcessInfo info, IntPtr startAddress, int length)
+        {
+            string dumpFilename = GetFilePath(info.WorkingDirectory, "MemoryDump_", ".txt");
+            ErcResult<byte[]> result = info.DumpMemoryRegion(startAddress, length);
+            ErcResult<string> output = new ErcResult<string>(info.ProcessCore);
+
+            int bytesPerLine = 0;
+
+            if (info.ProcessMachineType == MachineType.I386)
+            {
+                bytesPerLine = 8;
+            }
+            else if (info.ProcessMachineType == MachineType.x64)
+            {
+                bytesPerLine = 16;
+            }
+            else
+            {
+                output.Error = new ERCException("Unsupported MachineType. MachineType must be I386 or x64");
+                output.ReturnValue = "ERROR: Check exception.";
+                return output;
+            }
+
+            output.ReturnValue += "----------------------------------------------------------------------------------------------------------------------" + Environment.NewLine;
+            output.ReturnValue += "Contents of memory region 0x" + startAddress.ToString("X" + bytesPerLine) + " - 0x" + (startAddress + length).ToString("X" + bytesPerLine)
+                + " Created at: " + DateTime.Now + ". Created by: " + info.Author + Environment.NewLine;
+            output.ReturnValue += "----------------------------------------------------------------------------------------------------------------------" + Environment.NewLine;
+
+            for (int i = 0; i < result.ReturnValue.Length; i++)
+            {
+                if (i == 0)
+                {
+                    output.ReturnValue += startAddress.ToString("X" + bytesPerLine) + ": " + result.ReturnValue[i].ToString("X2") + " ";
+                }
+                else if (i % bytesPerLine == 0)
+                {
+                    output.ReturnValue += Environment.NewLine;
+                    output.ReturnValue += (startAddress + ((i / bytesPerLine) * bytesPerLine)).ToString("X" + bytesPerLine) + ": " + result.ReturnValue[i].ToString("X2") + " ";
+                }
+                else
+                {
+                    output.ReturnValue += result.ReturnValue[i].ToString("X2") + " ";
+                }
+            }
+
+            File.WriteAllText(dumpFilename, output.ReturnValue);
+            return output;
         }
         #endregion
     }

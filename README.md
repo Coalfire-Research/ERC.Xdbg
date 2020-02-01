@@ -35,11 +35,11 @@ The ByteArray option allows the generation of a byte array which is displayed in
 &nbsp;&nbsp;&nbsp;&nbsp;Example 1: `ERC --bytearray`     
 &nbsp;&nbsp;&nbsp;&nbsp;Example 2: `ERC --bytearray 0xFF0x0A \x0b 0C`   
 
-`--Compare`
+`--Compare`    
 Generates a table with a byte by byte comparison of an area of memory and the bytes from a file. Takes a memory address from which to start the search and a filepath for the binary file.
 &nbsp;&nbsp;&nbsp;&nbsp;Example 1: `ERC --Compare 0x12345678 C:\Users\You\Desktop\YourBinaryFile.bin`  
 
-`--Convert`
+`--Convert`    
 Takes a string and converts it to a hex representation. The string can be converted as if it was ASCII, Unicode, UTF-7, UTF-8 or UTF-32. 
 &nbsp;&nbsp;&nbsp;&nbsp;Valid conversion types:     
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Ascii to Hex = AtoH    
@@ -66,6 +66,10 @@ Search memory can take a string or set of bytes to search for within the attache
 &nbsp;&nbsp;&nbsp;&nbsp;Example 2: `ERC --SearchMemory FF E4 false false false false true` Search for bytes FF E4 excluding only OS dlls.         
 &nbsp;&nbsp;&nbsp;&nbsp;Example 3: `ERC --SearchMemory 1 HelloWorld` Search for the ASCII string HelloWorld.
 
+`--Dump`    
+Dumps the contents of process memory to the log and a file in the working directory. Takes a hex start address and a hex number for number of bytes to be read.      
+&nbsp;&nbsp;&nbsp;&nbsp;Example 1: `ERC --Dump 0x63428401 0x30`
+
 `--ListProcesses`    
 The list processes option takes no parameters and simply lists all visible processes on the machine.    
 &nbsp;&nbsp;&nbsp;&nbsp;Example 1: `ERC --ListProcesses`   
@@ -85,17 +89,20 @@ Displays info about threads associated with the attached process. Can be passed 
 &nbsp;&nbsp;&nbsp;&nbsp;Example 1: `ERC --threadInfo`    
 &nbsp;&nbsp;&nbsp;&nbsp;Example 2: `ERC --threadinfo false` Does not write threadinfo output to disk.      
 
-`--SEH`
+`--SEH`   
 Displays a list of addresses for pop pop ret instructions. Can be passed a list of module paths to be ignored in the search.    
 &nbsp;&nbsp;&nbsp;&nbsp;Example 1: `ERC --seh`    
 &nbsp;&nbsp;&nbsp;&nbsp;Example 2: `ERC --SEH C:\Path\To\Module\To\Exclude C:\Path\To\Other\Module\To\Exclude`
 
-`--EggHunters`
+`--EggHunters`    
 Prints a list of egghunters which can be used for various machine types. Can be passed 4 character string to be used as the egghunter search tag. Default tag is ERCD.    
 &nbsp;&nbsp;&nbsp;&nbsp;Example 1: `ERC --egghunters`    
 &nbsp;&nbsp;&nbsp;&nbsp;Example 2: `ERC --egghunters ABCD` Egghunters will be generated with the tag "ABCD"    
 
-
+`--FindNRP`    
+Searches process memory for a non repeating pattern specified in the pattern_extended and pattern_standard files. Takes an integer optional to specify the text formating (1 = Unicode, 2 = ASCII, 3 = UTF8, 4 = UTF7, 5 = UTF32, default = ASCII) and can have the parameter "true" passed to indicate the extended pattern should be used.     
+&nbsp;&nbsp;&nbsp;&nbsp;Example 1: `ERC --FindNRP`        
+&nbsp;&nbsp;&nbsp;&nbsp;Example 2: `ERC --FindNRP 2 true` Generates FindNRP table after searching for the extended NRP in Unicode format. 
 ```
     __________   ______  
    / ____ / __\ / ____/ 
@@ -107,6 +114,9 @@ Error: Arguments must be provided. Use --help for detailed information.
 Usage:       
    --Help          |
        Displays this message. Further help can be found at: https://github.com/Andy53/ERC.Xdbg/tree/master/ErcXdbg 
+   --Update        |
+       Can be used to update the plugin to the latest version. Can be passed a ip:port combination to specify the
+       proxy server to use.
    --Config        |
        Takes any of the following arguments, Get requests take no additional parameters, Set requests take a directory
        which will be set as the new value.
@@ -159,6 +169,8 @@ Usage:
        Example: ERC --SearchMemory FF E4. Search for bytes FF E4 including all dll's 
        Example: ERC --SearchMemory FF E4 true true. Search for bytes FF E4 excluding only dll's with ASLR and SafeSEH
        enabled
+   --Dump |
+       Dump contents of memory to a file. Takes an address to start at and a hex number of bytes to be read.
    --ListProcesses |
        Displays a list of processes running on the local machine.
    --ProcessInfo   |
@@ -172,7 +184,17 @@ Usage:
        output should be written to disk.
    --SEH           |
        Displays a list of addresses for pop pop ret instructions. Can be passed a list of module paths to be ignored
-       in the search.
+       in the search.Additionally boolean values of true or false can be used to exclude modules from the search with
+       certain characteristics. The values are optional however if you wish to exclude a later value all previous ones
+       must be included. Order is ASLR, SAFESEH, REBASE, NXCOMPAT, OSDLL. Additionally bytes which are to be excluded
+       from pointers can be added.
+       Example: ERC --SEH false false false false true. Search for POP, POP, RET instructions excluding only OS dll's
+       Example: ERC --SEH 0x00 0x0A Search for POP, POP, RET instructions in memory including all dll's excluding 
+       pointers that contain 0x00 or 0x0A
+       Example: ERC --SEH \x00 true true. Search for POP, POP, RET instructions excluding only dll's with ASLR and 
+       SafeSEH and pointers continain 0x00
+       Example: ERC --SEH 000A0D Search for POP, POP, RET instructions in memory including all dll's excluding pointers
+       containing 0x00, 0x0A and 0x0D
    --EggHunters    |
        Prints a list of egghunters which can be used for various machine types. Can be passed 4 character string to be
        used as the egghunter search tag. Default tag is ERCD.
