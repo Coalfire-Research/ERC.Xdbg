@@ -1,10 +1,36 @@
-# ERC.Xdbg
-An X64dbg Plugin of the [ERC](https://github.com/Andy53/ERC.net) Library.
+<img src="Icon.png" align="right" alt="Image" height="80" width="80"/>
+
+# ERC.Xdbg    
+[![License](https://img.shields.io/github/license/Andy53/ERC.Xdbg)](license.txt)
+[![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/Andy53/ERC.Xdbg?style=flat)](https://github.com/Andy53/ERC.Xdbg/tags)
+[![GitHub issues](https://img.shields.io/github/issues-raw/Andy53/ERC.Xdbg?style=flat)](https://github.com/Andy53/ERC.Xdbg/issues)
+<a href="https://github.com/Andy53/ERC.Xdbg/commits/master">
+    <img src="https://img.shields.io/github/last-commit/Andy53/ERC.Xdbg?style=flat-square&logo=github&logoColor=white">
+</a>
+
+An X64dbg plugin built around the [ERC](https://github.com/Andy53/ERC.net) library designed to assist in the exploit development process.
 
 ## Installation
 Installing the plugin is reasonably straight forward. Simply download the appropriate zip package for your architecture from the releases page of this repoistory and save then unzip it in the plugins directory of X64dbg. If X64dbg does not currently have a plugins directory then run it once to create the intial directory structure.
 
 If you wish to build the plugin from source simply clone the Git repository, open the solution in Visual Studio and build the project targeted for your architecture of choice. Then copy the binaries into the plugins directory of your X64dbg installation.
+
+## Documentation
+This library contains the fundamental specifications, documentation, and architecture that underpin ERC.Xdbg. If you're looking to understand the system better, or want to know how to integrate the various components, there is a lot of valuable information contained here.    
+
+[📄 Documentation and Specifications](https://andy53.github.io/ERC.net/)    
+
+## API     
+ERC.Net is the API used to develop ERC.Xdbg, all of the functionality in this plugin stems from the API. ERC.Net is a collection of tools designed to assist in debugging Windows application crashes.  
+        
+[📁 Source](https://github.com/Andy53/ERC.net) - https://github.com/Andy53/ERC.net     
+[📦 32 bit Package - ERC.Net-x86.SDK](https://www.nuget.org/packages/ERC.Net-x86/)    
+[📦 64 bit Package - ERC.Net-x64.SDK](https://www.nuget.org/packages/ERC.Net-x64/)   
+
+## Articles    
+A list of articles covering common usage scenarios using ERC.Xdbg.
+    
+[📄 The Basics of Exploit Development 1: Win32 Buffer Overflows](https://www.coalfire.com/The-Coalfire-Blog/January-2020/The-Basics-of-Exploit-Development-1) 
 
 ## Globals
 Global variables are variables which are set and stored for one session. They are reset to the defaults each time X64dbg is restarted.     
@@ -60,7 +86,7 @@ Downloads the latest release of the plugin from Github and extracts it into the 
 &nbsp;&nbsp;&nbsp;&nbsp;Example 1: `ERC --update 127.0.0.1:8080`
 
 `--config`    
-The config option can be used to set values in the config.xml file. Can be used to set things such as the project author, current working directory and error log file. These options are predominatly used when writing the output of operations to file.    
+The config option can be used to set values in the config.xml file. These options persist between sessions. Can be used to set things such as the project author, current working directory and error log file. These options are predominatly used when writing the output of operations to file.    
 &nbsp;&nbsp;&nbsp;&nbsp;Example 1: `ERC --config SetWorkingDirectory C:\Users\You\Desktop`   
 &nbsp;&nbsp;&nbsp;&nbsp;Example 2: `ERC --config GetErrorFilePath`
 
@@ -143,109 +169,8 @@ Prints a list of egghunters which can be used for various machine types. Can be 
 Searches process memory for a non repeating pattern specified in the pattern_extended and pattern_standard files. Takes an integer optional to specify the text formating (1 = Unicode, 2 = ASCII, 3 = UTF8, 4 = UTF7, 5 = UTF32, default = ASCII) and can have the parameter "true" passed to indicate the extended pattern should be used.     
 &nbsp;&nbsp;&nbsp;&nbsp;Example 1: `ERC --FindNRP`        
 &nbsp;&nbsp;&nbsp;&nbsp;Example 2: `ERC --FindNRP 2 true` Generates FindNRP table after searching for the extended NRP in Unicode format. 
-```
-    __________   ______  
-   / ____ / __\ / ____/ 
-  / __ / / /_/ / /       
- / /___ / _, _/ /___     
-/_____ /_/ |_|\____/    
--------------------------
-Error: Arguments must be provided. Use --help for detailed information.
-Globals:
-   Global arguments can be appended to any command and will persist for the length of the session until X64dbg is next
-   restarted.
-   -Aslr           |
-       Excludes ASLR enabled modules from all searches. Can be disabled by passing "false". -Aslr false
-   -SafeSEH        |
-       Excludes SafeSEH enabled modules from all searches. Can be disabled by passing "false". -SafeSEH false
-   -Rebase         |
-       Excludes Rebase enabled modules from all searches. Can be disabled by passing "false". -Rebase false
-   -NXCompat       |
-       Excludes NXCompat enabled modules from all searches. Can be disabled by passing "false". -NXCompat false
-   -OSDLL          |
-       Excludes OSDLL enabled modules from all searches. Can be disabled by passing "false". -OSDLL false
-   -Bytes          |
-       Excludes bytes from pointers returned in searches. Disabled by passing without any bytes.
-   -Protection     |
-       Defines the protection level of pointers to be included search results. Default is exec. This
-       allows only executable pointers to be returned in search results. A value must be provided with this switch,
-       options are read,write,exec. Options must be comma seperated without spaces.
-Usage:       
-   --Help          |
-       Displays this message. Further help can be found at: https://github.com/Andy53/ERC.Xdbg/tree/master/ErcXdbg 
-   --Update        |
-       Can be used to update the plugin to the latest version. Can be passed a ip:port combination to specify the
-       proxy server to use.
-   --Config        |
-       Takes any of the following arguments, Get requests take no additional parameters, Set requests take a directory
-       which will be set as the new value.
-           GetWorkingDirectory (ERC --config GetWorkingDirectory)
-           GetStandardPattern  (ERC --config GetStandardPatter)
-           GetExtendedPattern  (ERC --config GetExtendedPattern)
-           GetVersion          (ERC --config GetVersion)
-           GetAuthor           (ERC --config GetAuthor)
-           GetErrorFilePath    (ERC --config GetErrorFilePath)
-           SetWorkingDirectory (ERC --config SetWorkingDirectory directory)
-           SetStandardPattern  (ERC --config SetStandardPattern file)
-           SetExtendedPattern  (ERC --config SetExtendedPattern file)
-           SetAuthor           (ERC --config SetAuthor author)
-           SetErrorFilePath    (ERC --config SetErrorFilePath file)
-   --Pattern       |
-       Generates a non repeating pattern. A pattern of pure ASCII characters can be generated up to 20277 and up to  
-       66923 if special characters are used. The offset of a particular string can be found inside the pattern by 
-       providing a search string (must be at least 3 chars long).
-           Pattern create: ERC --pattern <create | c> <length>
-           Pattern offset: ERC --pattern <offset | o> <search string>
-   --Bytearray     |
-       Generates a bytearray which is saved to the working directory and displayed in the application log tab. A set 
-       of hex characters can be provided which will be excluded from the bytearray.
-   --Compare       |
-       Generates a table with a byte by byte comparison of an area of memory and the bytes from a file. Takes a memory 
-       from which to start the search and a filepath for the binary file
-   --Convert       |
-       Converts input from one form to another such as ASCII to hex, Unicode to hex, ASCII to bytes. 
-       Valid conversion types:
-           Ascii to Hex = AtoH
-           Unicdoe to Hex = UtoH
-           UTF-7 to Hex = 7toH
-           UTF-8 to Hex = 8toH
-           UTF-32 to Hex = 32toH
-   --Assemble      |
-       Takes a collection of assembley instructions and outputs the associated opcodes. Takes a boolean of 0 for x32 or
-        1 for x64 can be used to force the architecture of the opcodes returned, if neither is passed the architecture 
-       of the process will be used.
-   --Disassemble   |
-       Takes a collection of opcodes and outputs the associated assembley instructions. Takes a boolean of 0 for x32 or
-        1 for x64 can be used to force the architecture of the opcodes returned, if neither is passed the architecture 
-       of the process will be used.
-   --SearchMemory   |
-       Takes a search string of either bytes or a string to search for. Takes an (optional) integer to specify search 
-       type (0 = bytes, 1 = Unicode, 2 = ASCII, 4 = UTF7, 5 = UTF8).
-       Example: ERC --SearchMemory FF E4. Search for bytes FF E4 including all dll's 
-       Example: ERC --SearchMemory HelloWorld 1. Search for the string "HelloWorld in Unicode"
-   --Dump |
-       Dump contents of memory to a file. Takes an address to start at and a hex number of bytes to be read.
-   --ListProcesses |
-       Displays a list of processes running on the local machine.
-   --ProcessInfo   |
-       Displays info about the attached process, loaded modules and threads. Can be passed a boolen to indicate if the
-       output should be written to disk.
-   --ModuleInfo    |
-       Displays info about the modules loaded by the attached process. Can be passed a boolen to indicate if the output
-       should be written to disk.
-   --ThreadInfo    |
-       Displays info about threads associated with the attached process. Can be passed a boolen to indicate if the
-       output should be written to disk.
-   --SEH           |
-       Displays a list of addresses for pop pop ret instructions.
-       in the search.
-       Example: ERC --SEH Search for POP, POP, RET instructions in memory. 
-   --EggHunters    |
-       Prints a list of egghunters which can be used for various machine types. Can be passed 4 character string to be
-       used as the egghunter search tag. Default tag is ERCD.
-   --FindNrp       |
-       Generates a table detailing whether a repeating pattern has been found in the memory space of the process and
-       if any registers pointed into the pattern. Takes an integer for the text to look for (1 = Unicode, 2 = ASCII,
-       3 = UTF8, 4 = UTF7, 5 = UTF32, default = ASCII). Additionally if the value "True" is provided the extended 
-       pattern will be used which includes special characters.
-   ```
+
+## Author
+[Andy Bowden](mailto:andy@evilrobots.club) | <img alt="Twitter URL" src="https://img.shields.io/twitter/url?style=social&url=https%3A%2F%2Ftwitter.com%2FAndy53_">
+
+
