@@ -62,22 +62,63 @@ namespace ErcXdbg
                     ErcXdbg.PluginStart();
                     return true; 
                 }
-                
+
                 //Check a process is attached.
                 if (hProcess == IntPtr.Zero)
                 {
-                    PrintHelp("The debugger must be attached to a process to use ERC");
+                    bool exitWithError = true;
+                    bool update = false;
+                    bool config = false;
+                    ERC.ErcCore coreTemp = new ERC.ErcCore();
+
+                    foreach (string s in argv[0].Split(' '))
+                    {
+                        if (s.Contains("--"))
+                        {
+                            switch (s.ToLower())
+                            {
+                                case "--update":
+                                    exitWithError = false;
+                                    if (update == false)
+                                    {
+                                        update = true;
+                                        List<string> args = argv[0].Split(' ').ToList<string>();
+                                        args.RemoveAt(0);
+                                        Update(args);
+                                    }
+                                    break;
+                                case "--config":
+                                    exitWithError = false;
+                                    if (config == false)
+                                    {
+                                        config = true;
+                                        List<string> args = argv[0].Split(' ').ToList<string>();
+                                        args.RemoveAt(0);
+                                        Config(args, coreTemp);
+                                    }
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                    }
+
+                    if(exitWithError == true)
+                    {
+                        PrintHelp("The debugger must be attached to a process to use ERC");
+                    }
+                    
                     ErcXdbg.PluginStart();
-                    return true; 
+                    return true;
                 }
                 PLog.WriteLine("");
                 GC.Collect();
 
-                
                 ERC.ErcCore core = new ERC.ErcCore();
                 ERC.ProcessInfo info = new ERC.ProcessInfo(new ERC.ErcCore(), hProcess);
 
                 ParseCommand(argv[0], core, info);
+
             }
             catch (Exception e)
             {
@@ -1775,12 +1816,27 @@ namespace ErcXdbg
 
         private static void Debug(ERC.ProcessInfo info, List<string> parameters)
         {
+            List<string> arg = new List<string>();
+            arg.Add("ERC ");
+
+            foreach(string s in parameters)
+            {
+                arg.Add(s);
+            }
+
             for (int i = 0; i < parameters.Count; i++)
             {
                 if (parameters[i].Contains("--"))
                 {
                     parameters.Remove(parameters[i]);
                 }
+            }
+
+            if(parameters.Count == 0)
+            {
+                parameters.Add("showsession");
+                parameters.Add("showglobals");
+                parameters.Add("showargs");
             }
 
             for(int i = 0; i < parameters.Count && i >= 0; i++)
@@ -1822,7 +1878,7 @@ namespace ErcXdbg
                     {
                         PLog.WriteLine("DEBUG: Args ");
                         PLog.WriteLine("--------------------------------------------");
-                        PLog.WriteLine("Args = {0}\n", string.Join(" ", parameters.ToArray()));
+                        PLog.WriteLine("Args = {0}\n", string.Join(" ", arg.ToArray()));
                         parameters.Remove(parameters[i]);
                         i--;
                     }
