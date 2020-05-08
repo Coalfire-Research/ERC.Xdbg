@@ -23,35 +23,6 @@ namespace ErcXdbg
             {
                 DeleteOldPlugins();
                 
-                if (!File.Exists(sessionFile))
-                {
-                    WriteSessionFile(sessionFile);
-                }
-                else
-                {
-                    try
-                    {
-                        XmlDocument sessConfig = new XmlDocument();
-                        sessConfig.Load(sessionFile);
-                        var singleNode = sessConfig.DocumentElement.SelectNodes("//aslr");
-                        Globals.aslr = (singleNode[0].InnerText.ToLower() == "true") ? true : false;
-                        singleNode = sessConfig.DocumentElement.SelectNodes("//safeseh");
-                        Globals.safeseh = (singleNode[0].InnerText.ToLower() == "true") ? true : false;
-                        singleNode = sessConfig.DocumentElement.SelectNodes("//rebase");
-                        Globals.rebase = (singleNode[0].InnerText.ToLower() == "true") ? true : false;
-                        singleNode = sessConfig.DocumentElement.SelectNodes("//nxcompat");
-                        Globals.nxcompat = (singleNode[0].InnerText.ToLower() == "true") ? true : false;
-                        singleNode = sessConfig.DocumentElement.SelectNodes("//osdll");
-                        Globals.osdll = (singleNode[0].InnerText.ToLower() == "true") ? true : false;
-                        sessConfig = null;
-                        //GC.Collect(); Try and figure out why this causes a crash after 6 runs without a process attached.
-                    }
-                    catch (Exception e)
-                    {
-                        PLog.WriteLine("ERROR when attempting to read existing session file: " + e.Message);
-                    }
-                }
-                
                 //Get the handle of the attached process
                 var hProcess = Bridge.DbgValFromString("$hProcess");
                 
@@ -69,6 +40,7 @@ namespace ErcXdbg
                     bool exitWithError = true;
                     bool update = false;
                     bool config = false;
+                    bool debug = false;
                     ERC.ErcCore coreTemp = new ERC.ErcCore();
 
                     foreach (string s in argv[0].Split(' '))
@@ -97,6 +69,16 @@ namespace ErcXdbg
                                         Config(args, coreTemp);
                                     }
                                     break;
+                                case "--debug":
+                                    exitWithError = false;
+                                    if (debug == false)
+                                    {
+                                        debug = true;
+                                        List<string> args = argv[0].Split(' ').ToList<string>();
+                                        args.RemoveAt(0);
+                                        Debug(args);
+                                    }
+                                    break;
                                 default:
                                     break;
                             }
@@ -118,18 +100,14 @@ namespace ErcXdbg
                 ERC.ProcessInfo info = new ERC.ProcessInfo(new ERC.ErcCore(), hProcess);
 
                 ParseCommand(argv[0], core, info);
-
             }
             catch (Exception e)
             {
                 PrintHelp(e.Message);
-                WriteSessionFile(sessionFile, Globals.aslr.ToString(), Globals.safeseh.ToString(), Globals.rebase.ToString(), Globals.nxcompat.ToString(), Globals.osdll.ToString(),
-                    ByteArrayToString(Globals.bytes), Globals.protection);
                 ErcXdbg.PluginStart();
                 return true;
             }
-            WriteSessionFile(sessionFile, Globals.aslr.ToString(), Globals.safeseh.ToString(), Globals.rebase.ToString(), Globals.nxcompat.ToString(), Globals.osdll.ToString(),
-                    ByteArrayToString(Globals.bytes), Globals.protection.ToString());
+
             ErcXdbg.PluginStart();
             return true;
         }
@@ -243,65 +221,6 @@ namespace ErcXdbg
             help += "   --Rop           |\n";
             help += "       Much like the lottery you can try your luck and your life may get much easier, however it probably wont...\n";
             PLog.WriteLine(help);
-        }
-
-        private static void WriteSessionFile(string sessPath, string ASLR = "false", string SAFESEH = "false", string REBASE = "false", string NXCOMPAT = "false", string OSDLL = "false", 
-            string BYTES = "", string PROTECTION = "exec")
-        {
-            XmlDocument defaultConfig = new XmlDocument();
-            XmlDeclaration xmlDeclaration = defaultConfig.CreateXmlDeclaration("1.0", "UTF-8", null);
-            XmlElement root = defaultConfig.DocumentElement;
-            defaultConfig.InsertBefore(xmlDeclaration, root);
-
-            XmlElement erc_xml = defaultConfig.CreateElement(string.Empty, "ERC.Xdbg", Assembly.GetExecutingAssembly().GetName().Version.ToString());
-            defaultConfig.AppendChild(erc_xml);
-
-            XmlElement parameters = defaultConfig.CreateElement(string.Empty, "Parameters", string.Empty);
-            erc_xml.AppendChild(parameters);
-
-            XmlElement aslr = defaultConfig.CreateElement(string.Empty, "aslr", string.Empty);
-            XmlText text1 = (ASLR == "False") ? defaultConfig.CreateTextNode("False") : defaultConfig.CreateTextNode("True");
-            aslr.AppendChild(text1);
-            parameters.AppendChild(aslr);
-
-            XmlElement safeseh = defaultConfig.CreateElement(string.Empty, "safeseh", string.Empty);
-            text1 = (SAFESEH == "False") ? defaultConfig.CreateTextNode("False") : defaultConfig.CreateTextNode("True");
-            safeseh.AppendChild(text1);
-            parameters.AppendChild(safeseh);
-
-            XmlElement rebase = defaultConfig.CreateElement(string.Empty, "rebase", string.Empty);
-            text1 = (REBASE == "False") ? defaultConfig.CreateTextNode("False") : defaultConfig.CreateTextNode("True");
-            rebase.AppendChild(text1);
-            parameters.AppendChild(rebase);
-
-            XmlElement nxcompat = defaultConfig.CreateElement(string.Empty, "nxcompat", string.Empty);
-            text1 = (NXCOMPAT == "False") ? defaultConfig.CreateTextNode("False") : defaultConfig.CreateTextNode("True");
-            nxcompat.AppendChild(text1);
-            parameters.AppendChild(nxcompat);
-
-            XmlElement osdll = defaultConfig.CreateElement(string.Empty, "osdll", string.Empty);
-            text1 = (OSDLL == "False") ? defaultConfig.CreateTextNode("False") : defaultConfig.CreateTextNode("True");
-            osdll.AppendChild(text1);
-            parameters.AppendChild(osdll);
-
-            XmlElement bytes = defaultConfig.CreateElement(string.Empty, "Bytes", string.Empty);
-            text1 = defaultConfig.CreateTextNode(BYTES);
-            bytes.AppendChild(text1);
-            parameters.AppendChild(bytes);
-
-            XmlElement protection = defaultConfig.CreateElement(string.Empty, "Protection", string.Empty);
-            text1 = defaultConfig.CreateTextNode(PROTECTION);
-            protection.AppendChild(text1);
-            parameters.AppendChild(protection);
-
-            try
-            {
-                defaultConfig.Save(sessPath);
-            }
-            catch (Exception e)
-            {
-                PLog.WriteLine("ERROR when attempting to save new session file: " + e.Message);
-            }
         }
 
         private static void ParseCommand(string command, ERC.ErcCore core, ERC.ProcessInfo info)
@@ -661,6 +580,74 @@ namespace ErcXdbg
                     }
                     else if (parameters[i].ToLower() == "-protection")
                     {
+                        parameters.RemoveAt(i);
+                        i--;
+                    }
+
+                    if (parameters.Count > i + 1)
+                    {
+                        if (parameters[i].ToLower() == "-extended" && (parameters[i + 1].ToLower() == "true" || parameters[i + 1].ToLower() == "false"))
+                        {
+                            if (parameters[i + 1].ToLower() == "true")
+                            {
+                                Globals.extended = true;
+                                parameters.RemoveAt(i + 1);
+                                parameters.RemoveAt(i);
+                                i--;
+                            }
+                            else
+                            {
+                                Globals.extended = false;
+                                parameters.RemoveAt(i + 1);
+                                parameters.RemoveAt(i);
+                                i--;
+                            }
+                        }
+                        else if (parameters[i].ToLower() == "-extended")
+                        {
+                            Globals.extended = true;
+                            parameters.RemoveAt(i);
+                            i--;
+                        }
+                    }
+                    else if (parameters[i].ToLower() == "-extended")
+                    {
+                        Globals.extended = true;
+                        parameters.RemoveAt(i);
+                        i--;
+                    }
+
+                    if (parameters[i].ToLower() == "-ascii")
+                    {
+                        Globals.encode = Encoding.ASCII;
+                        parameters.RemoveAt(i);
+                        i--;
+                    }
+
+                    if (parameters[i].ToLower() == "-unicode")
+                    {
+                        Globals.encode = Encoding.Unicode;
+                        parameters.RemoveAt(i);
+                        i--;
+                    }
+
+                    if (parameters[i].ToLower() == "-utf7")
+                    {
+                        Globals.encode = Encoding.UTF7;
+                        parameters.RemoveAt(i);
+                        i--;
+                    }
+
+                    if (parameters[i].ToLower() == "-utf8")
+                    {
+                        Globals.encode = Encoding.UTF8;
+                        parameters.RemoveAt(i);
+                        i--;
+                    }
+
+                    if (parameters[i].ToLower() == "-utf32")
+                    {
+                        Globals.encode = Encoding.UTF32;
                         parameters.RemoveAt(i);
                         i--;
                     }
@@ -1040,19 +1027,9 @@ namespace ErcXdbg
 
             int patternLength = 0;
             string search = "";
-            bool extended = false;
+            bool extended = Globals.extended;
             bool offset = false;
             bool create = false;
-
-            //force extended character set by adding "extended" to command.
-            for (int i = 0; i < parameters.Count; i++)
-            {
-                if (parameters[i].Contains("extended"))
-                {
-                    parameters.Remove(parameters[i]);
-                    extended = true;
-                }
-            }
 
             for (int i = 0; i < parameters.Count; i++)
             {
@@ -1578,9 +1555,10 @@ namespace ErcXdbg
                 }
             }
 
-            int searchType = 0;
+            //int searchType = 0;
             string searchString = "";
 
+            /*
             for (int i = 0; i < parameters.Count; i++)
             {
                 if (parameters[i] == "0" || parameters[i] == "1" || parameters[i] == "2" ||
@@ -1591,9 +1569,10 @@ namespace ErcXdbg
                     i--;
                 }
             }
+            */
 
             searchString = string.Join("", parameters);
-            var output = ERC.DisplayOutput.SearchMemory(info, searchType, searchString, Globals.aslr, Globals.safeseh, Globals.rebase, Globals.nxcompat,
+            var output = ERC.DisplayOutput.SearchMemory(info, (int)Globals.encode, searchString, Globals.aslr, Globals.safeseh, Globals.rebase, Globals.nxcompat,
                 Globals.osdll, Globals.bytes, Globals.protection) ;
             foreach(string s in output)
             {
@@ -1687,55 +1666,14 @@ namespace ErcXdbg
 
         private static void FindNRP(ERC.ProcessInfo info, List<string> parameters)
         {
+            if((int)Globals.encode < 0 || (int)Globals.encode > 5)
+            {
+                Globals.encode = Encoding.ASCII;
+            }
+
             List<string> nrpInfo = new List<string>();
-            if (parameters.Count >= 10)
-            {
-                if (parameters.Count == 3)
-                {
-                    if (int.TryParse(parameters[1], out int n))
-                    {
-                        if (parameters[2] == "true")
-                        {
-                            nrpInfo = ERC.DisplayOutput.GenerateFindNRPTable(info, n, true);
-                        }
-                        else
-                        {
-                            nrpInfo = ERC.DisplayOutput.GenerateFindNRPTable(info, n);
-                        }
-                    }
-                    else if (int.TryParse(parameters[2], out int m))
-                    {
-                        if (parameters[1] == "true")
-                        {
-                            nrpInfo = ERC.DisplayOutput.GenerateFindNRPTable(info, m, true);
-                        }
-                        else
-                        {
-                            nrpInfo = ERC.DisplayOutput.GenerateFindNRPTable(info, m);
-                        }
-                    }
-                }
-                else
-                {
-                    bool isNumeric = int.TryParse(parameters[1], out int n);
-                    if (isNumeric == true && n > 0 && n < 5)
-                    {
-                        nrpInfo = ERC.DisplayOutput.GenerateFindNRPTable(info, n);
-                    }
-                    else if (parameters[1] == "true")
-                    {
-                        nrpInfo = ERC.DisplayOutput.GenerateFindNRPTable(info, 0, true);
-                    }
-                    else
-                    {
-                        nrpInfo = ERC.DisplayOutput.GenerateFindNRPTable(info);
-                    }
-                }
-            }
-            else
-            {
-                nrpInfo = ERC.DisplayOutput.GenerateFindNRPTable(info);
-            }
+            nrpInfo = ERC.DisplayOutput.GenerateFindNRPTable(info, (int)Globals.encode, Globals.extended);
+
             foreach (string s in nrpInfo)
             {
                 PLog.WriteLine(s);
@@ -1817,9 +1755,14 @@ namespace ErcXdbg
         private static void Debug(ERC.ProcessInfo info, List<string> parameters)
         {
             List<string> arg = new List<string>();
-            arg.Add("ERC ");
+            arg.Add("ERC");
+            PLog.WriteLine("\n");
 
-            foreach(string s in parameters)
+            bool showGlobals = false;
+            bool showArgs = false;
+            bool showProcess = false;
+
+            foreach (string s in parameters)
             {
                 arg.Add(s);
             }
@@ -1832,57 +1775,163 @@ namespace ErcXdbg
                 }
             }
 
-            if(parameters.Count == 0)
+            if (parameters.Count == 0)
             {
-                parameters.Add("showsession");
-                parameters.Add("showglobals");
-                parameters.Add("showargs");
+                showGlobals = true;
+                showArgs = true;
+                showProcess = true;
             }
 
-            for(int i = 0; i < parameters.Count && i >= 0; i++)
+            for (int i = 0; i < parameters.Count && i >= 0; i++)
             {
-                if(parameters.Count > i && i >= 0)
-                {
-                    if (parameters[i].ToLower() == "showsession")
-                    {
-                        PLog.WriteLine("DEBUG: Session ");
-                        PLog.WriteLine("--------------------------------------------");
-                        string sessionText = File.ReadAllText((Path.GetDirectoryName(Assembly.GetExecutingAssembly().CodeBase) + "\\Session.xml").Replace("file:\\", ""));
-                        PLog.WriteLine(sessionText + "\n");
-                        parameters.Remove(parameters[i]);
-                        i--;
-                    }
-                }
-
-                if(parameters.Count > i && i >= 0)
+                if (parameters.Count > i && i >= 0)
                 {
                     if (parameters[i].ToLower() == "showglobals")
                     {
-                        PLog.WriteLine("DEBUG: Globals ");
-                        PLog.WriteLine("--------------------------------------------");
-                        PLog.WriteLine("ASLR = {0}", Globals.aslr.ToString());
-                        PLog.WriteLine("SafeSEH = {0}", Globals.safeseh.ToString());
-                        PLog.WriteLine("Rebase = {0}", Globals.rebase.ToString());
-                        PLog.WriteLine("NXCompat = {0}", Globals.nxcompat.ToString());
-                        PLog.WriteLine("OSDll = {0}", Globals.osdll.ToString());
-                        PLog.WriteLine("Bytes = {0}", ByteArrayToString(Globals.bytes));
-                        PLog.WriteLine("Protection = {0}\n", Globals.protection);
+                        showGlobals = true;
                         parameters.Remove(parameters[i]);
                         i--;
                     }
                 }
-                
-                if(parameters.Count > i && i >= 0)
+
+                if (parameters.Count > i && i >= 0)
                 {
                     if (parameters[i].ToLower() == "showargs")
                     {
-                        PLog.WriteLine("DEBUG: Args ");
-                        PLog.WriteLine("--------------------------------------------");
-                        PLog.WriteLine("Args = {0}\n", string.Join(" ", arg.ToArray()));
+                        showArgs = true;
                         parameters.Remove(parameters[i]);
                         i--;
                     }
                 }
+
+                if (parameters.Count > i && i >= 0)
+                {
+                    if (parameters[i].ToLower() == "showprocess")
+                    {
+                        showProcess = true;
+                        parameters.Remove(parameters[i]);
+                        i--;
+                    }
+                }
+            }
+
+            if (showArgs == false && showGlobals == false)
+            {
+                showArgs = true;
+                PLog.WriteLine("\n");
+            }
+
+            if (showProcess == true)
+            {
+                PLog.WriteLine("DEBUG: Process ");
+                PLog.WriteLine("--------------------------------------------");
+                PLog.WriteLine("Process Name         = {0}", info.ProcessName);
+                PLog.WriteLine("Process Description  = {0}", info.ProcessDescription);
+                PLog.WriteLine("Process Path         = {0}", info.ProcessPath);
+                PLog.WriteLine("Process ID           = {0}", info.ProcessID);
+                PLog.WriteLine("Process Handle       = {0}", info.ProcessHandle.ToString("X"));
+                PLog.WriteLine("Process Architecture = {0}\n", info.ProcessMachineType.ToString());
+            }
+
+            if (showGlobals == true)
+            {
+                PLog.WriteLine("DEBUG: Globals ");
+                PLog.WriteLine("--------------------------------------------");
+                PLog.WriteLine("ASLR       = {0}", Globals.aslr.ToString());
+                PLog.WriteLine("SafeSEH    = {0}", Globals.safeseh.ToString());
+                PLog.WriteLine("Rebase     = {0}", Globals.rebase.ToString());
+                PLog.WriteLine("NXCompat   = {0}", Globals.nxcompat.ToString());
+                PLog.WriteLine("OSDll      = {0}", Globals.osdll.ToString());
+                PLog.WriteLine("Bytes      = {0}", ByteArrayToString(Globals.bytes));
+                PLog.WriteLine("Protection = {0}", Globals.protection);
+                PLog.WriteLine("Extended   = {0}", Globals.extended.ToString());
+                PLog.WriteLine("Encoding   = {0}\n", Globals.encode.ToString());
+            }
+
+            if (showArgs == true)
+            {
+                PLog.WriteLine("DEBUG: Args ");
+                PLog.WriteLine("--------------------------------------------");
+                PLog.WriteLine("Args = {0}\n", string.Join(" ", arg.ToArray()));
+            }
+        }
+
+        private static void Debug(List<string> parameters)
+        {
+            List<string> arg = new List<string>();
+            arg.Add("ERC");
+            PLog.WriteLine("\n");
+
+            bool showGlobals = false;
+            bool showArgs = false;
+
+            foreach (string s in parameters)
+            {
+                arg.Add(s);
+            }
+
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                if (parameters[i].Contains("--"))
+                {
+                    parameters.Remove(parameters[i]);
+                }
+            }
+
+            if (parameters.Count == 0)
+            {
+                showGlobals = true;
+                showArgs = true;
+            }
+
+            for (int i = 0; i < parameters.Count && i >= 0; i++)
+            {
+                if (parameters.Count > i && i >= 0)
+                {
+                    if (parameters[i].ToLower() == "showglobals")
+                    {
+                        showGlobals = true;
+                        parameters.Remove(parameters[i]);
+                        i--;
+                    }
+                }
+
+                if (parameters.Count > i && i >= 0)
+                {
+                    if (parameters[i].ToLower() == "showargs")
+                    {
+                        showArgs = true;
+                        parameters.Remove(parameters[i]);
+                        i--;
+                    }
+                }
+            }
+
+            if(showArgs == false && showGlobals == false)
+            {
+                showArgs = true;
+            }
+
+            if (showGlobals == true)
+            {
+                PLog.WriteLine("DEBUG: Globals ");
+                PLog.WriteLine("--------------------------------------------");
+                PLog.WriteLine("ASLR       = {0}", Globals.aslr.ToString());
+                PLog.WriteLine("SafeSEH    = {0}", Globals.safeseh.ToString());
+                PLog.WriteLine("Rebase     = {0}", Globals.rebase.ToString());
+                PLog.WriteLine("NXCompat   = {0}", Globals.nxcompat.ToString());
+                PLog.WriteLine("OSDll      = {0}", Globals.osdll.ToString());
+                PLog.WriteLine("Bytes      = {0}", ByteArrayToString(Globals.bytes));
+                PLog.WriteLine("Protection = {0}", Globals.protection);
+                PLog.WriteLine("Extended   = {0}", Globals.extended.ToString());
+                PLog.WriteLine("Encoding   = {0}\n", Globals.encode.ToString());
+            }
+
+            if (showArgs == true)
+            {
+                PLog.WriteLine("DEBUG: Args ");
+                PLog.WriteLine("--------------------------------------------");
+                PLog.WriteLine("Args = {0}\n", string.Join(" ", arg.ToArray()));
             }
         }
     }
