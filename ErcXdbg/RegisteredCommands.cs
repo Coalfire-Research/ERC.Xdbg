@@ -144,6 +144,16 @@ namespace ErcXdbg
             help += "       Defines the protection level of pointers to be included search results. Default is exec. This\n";
             help += "       allows only executable pointers to be returned in search results. A value must be provided with this switch,\n";
             help += "       options are read,write,exec. Options must be comma seperated without spaces.\n";
+            help += "   -ASCII          |\n";
+            help += "       Sets the character encoding as ASCII. All search functions will seach for text in ASCII.\n";
+            help += "   -Unicode        |\n";
+            help += "       Sets the character encoding as Unicode. All search functions will seach for text in Unicode.\n";
+            help += "   -UTF7           |\n";
+            help += "       Sets the character encoding as Unicode. All search functions will seach for text in UTF-7.\n";
+            help += "   -UTF8           |\n";
+            help += "       Sets the character encoding as Unicode. All search functions will seach for text in UTF-8.\n";
+            help += "   -UTF32          |\n";
+            help += "       Sets the character encoding as Unicode. All search functions will seach for text in UTF-32.\n";
             help += "Usage:       \n";
             help += "   --Help          |\n";
             help += "       Displays this message. Further help can be found at: https://github.com/Andy53/ERC.Xdbg/tree/master/ErcXdbg \n";
@@ -1555,10 +1565,9 @@ namespace ErcXdbg
                 }
             }
 
-            //int searchType = 0;
+            int searchType = 0;
             string searchString = "";
 
-            /*
             for (int i = 0; i < parameters.Count; i++)
             {
                 if (parameters[i] == "0" || parameters[i] == "1" || parameters[i] == "2" ||
@@ -1569,10 +1578,9 @@ namespace ErcXdbg
                     i--;
                 }
             }
-            */
 
             searchString = string.Join("", parameters);
-            var output = ERC.DisplayOutput.SearchMemory(info, (int)Globals.encode, searchString, Globals.aslr, Globals.safeseh, Globals.rebase, Globals.nxcompat,
+            var output = ERC.DisplayOutput.SearchMemory(info, searchType, searchString, Globals.aslr, Globals.safeseh, Globals.rebase, Globals.nxcompat,
                 Globals.osdll, Globals.bytes, Globals.protection) ;
             foreach(string s in output)
             {
@@ -1642,11 +1650,25 @@ namespace ErcXdbg
 
             if(Globals.bytes.Length > 0)
             {
-                sehJumpAddresses = ERC.DisplayOutput.GetSEHJumps(info, aslr, safeseh, rebase, nxcompat, osdll, Globals.bytes, Globals.protection);
+                if(Globals.encode == Encoding.Unicode)
+                {
+                    sehJumpAddresses = ERC.DisplayOutput.GetSEHJumpsUnicode(info, aslr, safeseh, rebase, nxcompat, osdll, Globals.bytes, Globals.protection);
+                }
+                else
+                {
+                    sehJumpAddresses = ERC.DisplayOutput.GetSEHJumps(info, aslr, safeseh, rebase, nxcompat, osdll, Globals.bytes, Globals.protection);
+                }
             }
             else
             {
-                sehJumpAddresses = ERC.DisplayOutput.GetSEHJumps(info, aslr, safeseh, rebase, nxcompat, osdll, null, Globals.protection);
+                if (Globals.encode == Encoding.Unicode)
+                {
+                    sehJumpAddresses = ERC.DisplayOutput.GetSEHJumpsUnicode(info, aslr, safeseh, rebase, nxcompat, osdll, null, Globals.protection);
+                }
+                else
+                {
+                    sehJumpAddresses = ERC.DisplayOutput.GetSEHJumps(info, aslr, safeseh, rebase, nxcompat, osdll, null, Globals.protection);
+                } 
             }
 
             foreach(string s in sehJumpAddresses)
