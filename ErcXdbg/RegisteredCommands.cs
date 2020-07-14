@@ -5,10 +5,9 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Reflection;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Xml;
 using Managed.x64dbg.SDK;
+using System.Management;
 
 namespace ErcXdbg
 {
@@ -144,16 +143,6 @@ namespace ErcXdbg
             help += "       Defines the protection level of pointers to be included search results. Default is exec. This\n";
             help += "       allows only executable pointers to be returned in search results. A value must be provided with this switch,\n";
             help += "       options are read,write,exec. Options must be comma seperated without spaces.\n";
-            help += "   -ASCII          |\n";
-            help += "       Sets the character encoding as ASCII. All search functions will seach for text in ASCII.\n";
-            help += "   -Unicode        |\n";
-            help += "       Sets the character encoding as Unicode. All search functions will seach for text in Unicode.\n";
-            help += "   -UTF7           |\n";
-            help += "       Sets the character encoding as Unicode. All search functions will seach for text in UTF-7.\n";
-            help += "   -UTF8           |\n";
-            help += "       Sets the character encoding as Unicode. All search functions will seach for text in UTF-8.\n";
-            help += "   -UTF32          |\n";
-            help += "       Sets the character encoding as Unicode. All search functions will seach for text in UTF-32.\n";
             help += "Usage:       \n";
             help += "   --Help          |\n";
             help += "       Displays this message. Further help can be found at: https://github.com/Andy53/ERC.Xdbg/tree/master/ErcXdbg \n";
@@ -721,82 +710,93 @@ namespace ErcXdbg
                 ServicePointManager.ServerCertificateValidationCallback += (sender, certificate, chain, sslPolicyErrors) => true;
                 System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
 
-                wClient.Headers.Add("Accept", "text/html, application/xhtml+xml,application/xml;q=0.9,image/ webp,*/*;q=0.8");
-                wClient.Headers.Add("User-Agent", "ERC-Plugin");
-
-                //Set proxy if specified.
-                if (proxy == true)
-                {
-                    WebProxy wProxy = new WebProxy(proxyIpAddress + ":" + proxyPort);
-                    wClient.Proxy = wProxy;
-                }
-                
-                if (!updatePath.Contains("\\x64\\"))
-                {
-                    updatePath = updatePath.Replace("\\x32\\", "\\x64\\");
-                }
-
-                string releases = wClient.DownloadString("https://api.github.com/repos/andy53/erc.xdbg/releases/tags/64"); //Uncomment if 64 bit.
-
-                string[] releasesArray = releases.Split(',');
+                string releases = "";
+                string[] releasesArray = null;
                 string fileurl = "";
-                foreach (string s in releasesArray)
-                {
-                    if (s.Contains("browser_download_url"))
-                    {
-                        fileurl = s.Split('\"')[3];
-                    }
-                }
-
-                string[] urlSegments = fileurl.Split('/');
-                string filename = urlSegments[urlSegments.Length - 1];
-                string zipPath = updatePath + "\\" + filename;
-                wClient.DownloadFile(fileurl, zipPath);
-
-                // Ensures that the last character on the extraction path
-                // is the directory separator char. 
-                // Without this, a malicious zip file could try to traverse outside of the expected
-                // extraction path.
-                if (!updatePath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
-                {
-                    updatePath += Path.DirectorySeparatorChar;
-                }
-
-                string[] files = Directory.GetFiles(updatePath);
+                string[] urlSegments = null;
+                string filename = "";
+                string zipPath = "";
+                string[] files = null;
                 bool oldPluginRenamed = false;
 
-                foreach (string s in files)
-                {
-                    if (s.Contains("Erc.Xdbg.dp64-OLD") && oldPluginRenamed == false)
-                    {
-                        int i = 0;
-                        var holder = s.Split('_')[1];
-                        int.TryParse(holder[0].ToString(), out i);
-                        System.IO.File.Move(updatePath + "Erc.Xdbg.dp64", updatePath + "Erc.Xdbg.dp64-OLD_" + i.ToString() + ".txt");
-                        oldPluginRenamed = true;
-                    }
-                }
+                if (Environment.Is64BitOperatingSystem) { 
+                    wClient.Headers.Add("Accept", "text/html, application/xhtml+xml,application/xml;q=0.9,image/ webp,*/*;q=0.8");
+                    wClient.Headers.Add("User-Agent", "ERC-Plugin");
 
-                if (oldPluginRenamed == false)
-                {
-                    if(File.Exists(updatePath + "Erc.Xdbg.dp64"))
+                    //Set proxy if specified.
+                    if (proxy == true)
                     {
-                        System.IO.File.Move(updatePath + "Erc.Xdbg.dp64", updatePath + "Erc.Xdbg.dp64-OLD_0.txt");
+                        WebProxy wProxy = new WebProxy(proxyIpAddress + ":" + proxyPort);
+                        wClient.Proxy = wProxy;
                     }
-                }
 
-                //unzip update package 
-                using (ZipArchive archive = ZipFile.OpenRead(zipPath))
-                {
-                    foreach (ZipArchiveEntry entry in archive.Entries)
+                    if (!updatePath.Contains("\\x64\\"))
                     {
-                        string destinationPath = Path.GetFullPath(Path.Combine(updatePath, entry.FullName));
-                        entry.ExtractToFile(destinationPath, true);
+                        updatePath = updatePath.Replace("\\x32\\", "\\x64\\");
                     }
-                }
 
-                //Delete the zip archive.
-                File.Delete(zipPath);
+                    releases = wClient.DownloadString("https://api.github.com/repos/andy53/erc.xdbg/releases/tags/64");
+
+                    releasesArray = releases.Split(',');
+                    fileurl = "";
+                    foreach (string s in releasesArray)
+                    {
+                        if (s.Contains("browser_download_url"))
+                        {
+                            fileurl = s.Split('\"')[3];
+                        }
+                    }
+
+                    urlSegments = fileurl.Split('/');
+                    filename = urlSegments[urlSegments.Length - 1];
+                    zipPath = updatePath + "\\" + filename;
+                    wClient.DownloadFile(fileurl, zipPath);
+
+                    // Ensures that the last character on the extraction path
+                    // is the directory separator char. 
+                    // Without this, a malicious zip file could try to traverse outside of the expected
+                    // extraction path.
+                    if (!updatePath.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+                    {
+                        updatePath += Path.DirectorySeparatorChar;
+                    }
+
+                    files = Directory.GetFiles(updatePath);
+                    oldPluginRenamed = false;
+
+                    foreach (string s in files)
+                    {
+                        if (s.Contains("Erc.Xdbg.dp64-OLD") && oldPluginRenamed == false)
+                        {
+                            int i = 0;
+                            var holder = s.Split('_')[1];
+                            int.TryParse(holder[0].ToString(), out i);
+                            System.IO.File.Move(updatePath + "Erc.Xdbg.dp64", updatePath + "Erc.Xdbg.dp64-OLD_" + i.ToString() + ".txt");
+                            oldPluginRenamed = true;
+                        }
+                    }
+
+                    if (oldPluginRenamed == false)
+                    {
+                        if (File.Exists(updatePath + "Erc.Xdbg.dp64"))
+                        {
+                            System.IO.File.Move(updatePath + "Erc.Xdbg.dp64", updatePath + "Erc.Xdbg.dp64-OLD_0.txt");
+                        }
+                    }
+
+                    //unzip update package 
+                    using (ZipArchive archive = ZipFile.OpenRead(zipPath))
+                    {
+                        foreach (ZipArchiveEntry entry in archive.Entries)
+                        {
+                            string destinationPath = Path.GetFullPath(Path.Combine(updatePath, entry.FullName));
+                            entry.ExtractToFile(destinationPath, true);
+                        }
+                    }
+
+                    //Delete the zip archive.
+                    File.Delete(zipPath);
+                }
 
                 wClient.Headers.Add("Accept", "text/html, application/xhtml+xml,application/xml;q=0.9,image/ webp,*/*;q=0.8");
                 wClient.Headers.Add("User-Agent", "ERC-Plugin");
@@ -1783,6 +1783,7 @@ namespace ErcXdbg
             bool showGlobals = false;
             bool showArgs = false;
             bool showProcess = false;
+            bool showSystem = false;
 
             foreach (string s in parameters)
             {
@@ -1802,10 +1803,21 @@ namespace ErcXdbg
                 showGlobals = true;
                 showArgs = true;
                 showProcess = true;
+                showSystem = true;
             }
 
             for (int i = 0; i < parameters.Count && i >= 0; i++)
             {
+                if (parameters.Count > i && i >= 0)
+                {
+                    if (parameters[i].ToLower() == "showSystem")
+                    {
+                        showSystem = true;
+                        parameters.Remove(parameters[i]);
+                        i--;
+                    }
+                }
+
                 if (parameters.Count > i && i >= 0)
                 {
                     if (parameters[i].ToLower() == "showglobals")
@@ -1835,6 +1847,30 @@ namespace ErcXdbg
                         i--;
                     }
                 }
+            }
+
+            if(showSystem == true)
+            {
+                ManagementObjectSearcher mos = new ManagementObjectSearcher("select * from Win32_OperatingSystem");
+
+                PLog.WriteLine("DEBUG: System Information");
+                PLog.WriteLine("--------------------------------------------");
+                foreach (ManagementObject managementObject in mos.Get())
+                {
+                    if (managementObject["Caption"] != null)
+                    {
+                        PLog.WriteLine("Operating System Name  :  " + managementObject["Caption"].ToString());
+                    }
+                    if (managementObject["OSArchitecture"] != null)
+                    {
+                        PLog.WriteLine("Operating System Architecture  :  " + managementObject["OSArchitecture"].ToString());
+                    }
+                    if (managementObject["CSDVersion"] != null)
+                    {
+                        PLog.WriteLine("Operating System Service Pack   :  " + managementObject["CSDVersion"].ToString());
+                    }
+                }
+                PLog.WriteLine("");
             }
 
             if (showArgs == false && showGlobals == false)
@@ -1886,6 +1922,7 @@ namespace ErcXdbg
 
             bool showGlobals = false;
             bool showArgs = false;
+            bool showSystem = false;
 
             foreach (string s in parameters)
             {
@@ -1904,10 +1941,21 @@ namespace ErcXdbg
             {
                 showGlobals = true;
                 showArgs = true;
+                showSystem = true;
             }
 
             for (int i = 0; i < parameters.Count && i >= 0; i++)
             {
+                if (parameters.Count > i && i >= 0)
+                {
+                    if (parameters[i].ToLower() == "showSystem")
+                    {
+                        showSystem = true;
+                        parameters.Remove(parameters[i]);
+                        i--;
+                    }
+                }
+
                 if (parameters.Count > i && i >= 0)
                 {
                     if (parameters[i].ToLower() == "showglobals")
@@ -1929,7 +1977,31 @@ namespace ErcXdbg
                 }
             }
 
-            if(showArgs == false && showGlobals == false)
+            if (showSystem == true)
+            {
+                ManagementObjectSearcher mos = new ManagementObjectSearcher("select * from Win32_OperatingSystem");
+
+                PLog.WriteLine("DEBUG: System Information");
+                PLog.WriteLine("--------------------------------------------");
+                foreach (ManagementObject managementObject in mos.Get())
+                {
+                    if (managementObject["Caption"] != null)
+                    {
+                        PLog.WriteLine("Operating System Name  :  " + managementObject["Caption"].ToString());
+                    }
+                    if (managementObject["OSArchitecture"] != null)
+                    {
+                        PLog.WriteLine("Operating System Architecture  :  " + managementObject["OSArchitecture"].ToString());
+                    }
+                    if (managementObject["CSDVersion"] != null)
+                    {
+                        PLog.WriteLine("Operating System Service Pack   :  " + managementObject["CSDVersion"].ToString());
+                    }
+                }
+                PLog.WriteLine("");
+            }
+
+            if (showArgs == false && showGlobals == false)
             {
                 showArgs = true;
             }
