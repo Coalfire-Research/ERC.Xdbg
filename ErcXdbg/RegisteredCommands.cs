@@ -138,7 +138,8 @@ namespace ErcXdbg
             help += "   -OSDLL          |\n";
             help += "       Excludes OSDLL enabled modules from all searches. Can be disabled by passing \"false\". -OSDLL false\n";
             help += "   -Bytes          |\n";
-            help += "       Excludes bytes from pointers returned in searches. Disabled by passing without any bytes.\n";
+            help += "       Excludes bytes from pointers returned in searches and from being added to bytearrays. Disabled by passing\n"; 
+            help += "       without any bytes.\n";
             help += "   -Protection     |\n";
             help += "       Defines the protection level of pointers to be included search results. Default is exec. This\n";
             help += "       allows only executable pointers to be returned in search results. A value must be provided with this switch,\n";
@@ -163,6 +164,7 @@ namespace ErcXdbg
             help += "           SetExtendedPattern  (ERC --config SetExtendedPattern file)\n";
             help += "           SetAuthor           (ERC --config SetAuthor author)\n";
             help += "           SetErrorFilePath    (ERC --config SetErrorFilePath file)\n";
+            help += "       Passed without parameters will print all Get requests.\n";
             help += "   --Pattern       |\n";
             help += "       Generates a non repeating pattern. A pattern of pure ASCII characters can be generated up to 20277 and up to  \n";
             help += "       66923 if special characters are used. The offset of a particular string can be found inside the pattern by \n";
@@ -171,7 +173,7 @@ namespace ErcXdbg
             help += "           Pattern offset: ERC --pattern <offset | o> <search string>\n";
             help += "   --Bytearray     |\n";
             help += "       Generates a bytearray which is saved to the working directory and displayed in the application log tab. A set \n";
-            help += "       of hex characters can be provided which will be excluded from the bytearray.\n";
+            help += "       of hex characters can be provided to the -byte global which will be excluded from the bytearray.\n";
             help += "   --Compare       |\n";
             help += "       Generates a table with a byte by byte comparison of an area of memory and the bytes from a file. Takes a memory \n";
             help += "       from which to start the search and a filepath for the binary file\n";
@@ -191,7 +193,13 @@ namespace ErcXdbg
             help += "       Takes a search string of either bytes or a string to search for. Takes an (optional) integer to specify search \n";
             help += "       type (0 = bytes, 1 = Unicode, 2 = ASCII, 4 = UTF7, 5 = UTF8).\n";        
             help += "       Example: ERC --SearchMemory FF E4. Search for bytes FF E4 including all dll's \n";
-            help += "       Example: ERC --SearchMemory HelloWorld 1. Search for the string \"HelloWorld in Unicode\"\n"; 
+            help += "       Example: ERC --SearchMemory HelloWorld 1. Search for the string \"HelloWorld in Unicode\"\n";
+            help += "   --SearchModules   |\n";
+            help += "       Takes a search string of either bytes or a string to search for in a processes loaded modules. Takes an \n";
+            help += "       (optional) integer to specify search \n";
+            help += "       type (0 = bytes, 1 = Unicode, 2 = ASCII, 4 = UTF7, 5 = UTF8).\n";
+            help += "       Example: ERC --SearchModules FF E4. Search for bytes FF E4 including all dll's \n";
+            help += "       Example: ERC --SearchModules FF E4 module1.dll module2.dll. Search for bytes FF E4 only in module1.dll and module2.dll\n";
             help += "   --Dump |\n";
             help += "       Dump contents of memory to a file. Takes an address to start at and a hex number of bytes to be read.\n"; 
             help += "   --ListProcesses |\n";
@@ -217,8 +225,19 @@ namespace ErcXdbg
             help += "       if any registers pointed into the pattern. Takes an integer for the text to look for (1 = Unicode, 2 = ASCII,\n";
             help += "       3 = UTF8, 4 = UTF7, 5 = UTF32, default = ASCII). Additionally if the value \"True\" is provided the extended \n";
             help += "       pattern will be used which includes special characters.\n";
+            help += "   --HeapInfo      |\n";
+            help += "       Displays information about the heap. Takes commands search, stats, ids, and dump. Takes an integer to\n";
+            help += "       represent the ID of the heap to utilize. Takes a hex value to specify the address of the heap entry to utilize.\n";
+            help += "       If both heap ID and start address are specified heap ID takes precedence, if start address and a byte pattern to.\n";
+            help += "       search for are specified start address must be provided first. Takes a boolean value of true/false/1/0\n";
+            help += "       to specify if output should be written to disk.\n";
+            help += "       Example: ERC --HeapInfo stats. Display statistics about all heaps associated with the process.\n";
+            help += "       Example: ERC --HeapInfo 0x00453563 search FFE4. Search for FFE4 in the Heap entry starting at 0x00453563\n";
+            help += "       Example: ERC --HeapInfo 0x00453563 dump. Dump all memory from heap entry starting at 0x00453563\n";
             help += "   --Rop           |\n";
             help += "       Much like the lottery you can try your luck and your life may get much easier, however it probably wont...\n";
+            help += "   --Reset         |\n";
+            help += "       Clears all global variables and user defined configurations.";
             PLog.WriteLine(help);
         }
 
@@ -283,6 +302,9 @@ namespace ErcXdbg
                     case "--searchmemory":
                         SearchMemory(info, parameters);
                         return;
+                    case "--searchmodules":
+                        SearchModules(info, parameters);
+                        return;
                     case "--dump":
                         DumpMemory(info, parameters);
                         return;
@@ -338,11 +360,17 @@ namespace ErcXdbg
                     case "--findnrp":
                         FindNRP(info, parameters);
                         return;
+                    case "--heapinfo":
+                        HeapInfo(info, parameters);
+                        return;
                     case "--rop":
                         rop(info);
                         return;
                     case "--debug":
                         Debug(info, parameters);
+                        return;
+                    case "--reset":
+                        Reset(info, parameters);
                         return;
                     default:
                         PrintHelp("The command was not structured correctly: Option is not supported. ERC <option> <parameters>");
@@ -877,7 +905,7 @@ namespace ErcXdbg
         private static void Config(List<string> parameters, ERC.ErcCore core)
         {
             PLog.WriteLine("ERC --Config");
-            PLog.WriteLine("----------------------------------------------------------------------");
+            PLog.WriteLine("--------------------------------------------");
             for (int i = 0; i < parameters.Count; i++)
             {
                 if (parameters[i].Contains("--"))
@@ -886,37 +914,51 @@ namespace ErcXdbg
                 }
             }
 
+            if(parameters.Count == 0)
+            {
+                PLog.WriteLine("Configuration Settings:");
+                PLog.WriteLine("Working Directory = {0}", core.WorkingDirectory);
+                PLog.WriteLine("ERC Version = {0}", core.ErcVersion);
+                PLog.WriteLine("Author = {0}", core.Author);
+                PLog.WriteLine("Error Log File = {0}", core.SystemErrorLogPath);
+                PLog.WriteLine("Standard Pattern Location = {0}", core.PatternStandardPath);
+                PLog.WriteLine("Standard Pattern Location = {0}", core.PatternExtendedPath);
+                //return null;
+                PLog.WriteLine("--------------------------------------------");
+                return;
+            }
+            
             switch (parameters[0].ToLower())
             {
                 case "getworkingdirectory":
                     PLog.WriteLine("Working Directory = {0}", core.WorkingDirectory);
                     //return core.WorkingDirectory;
-                    PLog.WriteLine("----------------------------------------------------------------------");
+                    PLog.WriteLine("--------------------------------------------");
                     return;
                 case "getversion":
                     PLog.WriteLine("ERC Version = {0}", core.ErcVersion);
                     //return core.ErcVersion;
-                    PLog.WriteLine("----------------------------------------------------------------------");
+                    PLog.WriteLine("--------------------------------------------");
                     return;
                 case "getauthor":
                     PLog.WriteLine("Author = {0}", core.Author);
                     //return core.Author;
-                    PLog.WriteLine("----------------------------------------------------------------------");
+                    PLog.WriteLine("--------------------------------------------");
                     return;
                 case "geterrorlogpath":
                     PLog.WriteLine("Error Log File = {0}", core.SystemErrorLogPath);
                     //return core.SystemErrorLogPath;
-                    PLog.WriteLine("----------------------------------------------------------------------");
+                    PLog.WriteLine("--------------------------------------------");
                     return;
                 case "getstandardpattern":
                     PLog.WriteLine("Standard Pattern Location = {0}", core.PatternStandardPath);
                     //return core.PatternStandardPath;
-                    PLog.WriteLine("----------------------------------------------------------------------");
+                    PLog.WriteLine("--------------------------------------------");
                     return;
                 case "getextendedpattern":
                     PLog.WriteLine("Standard Pattern Location = {0}", core.PatternExtendedPath);
                     //return core.PatternExtendedPath;
-                    PLog.WriteLine("----------------------------------------------------------------------");
+                    PLog.WriteLine("--------------------------------------------");
                     return;
                 case "setworkingdirectory":
                     if(parameters.Count == 2)
@@ -925,19 +967,19 @@ namespace ErcXdbg
                         {
                             core.SetWorkingDirectory(parameters[1]);
                             PLog.WriteLine("New Working Directory = {0}", core.WorkingDirectory);
-                            PLog.WriteLine("----------------------------------------------------------------------");
+                            PLog.WriteLine("--------------------------------------------");
                             return;
                         }
                         else
                         {
                             PrintHelp("Please provide a valid directory.");
-                            PLog.WriteLine("----------------------------------------------------------------------");
+                            PLog.WriteLine("--------------------------------------------");
                         }
                     }
                     else
                     {
                         PLog.WriteLine("Error incorrect number of arguments. Use ERC --config SetWorkingDirectory <PATH>");
-                        PLog.WriteLine("----------------------------------------------------------------------");
+                        PLog.WriteLine("--------------------------------------------");
                     }
                     //return core.WorkingDirectory;
                     return;
@@ -959,7 +1001,7 @@ namespace ErcXdbg
                         PLog.WriteLine("Error incorrect number of arguments. Use ERC --config SetAuthor <Author>");
                     }
                     //return core.Author;
-                    PLog.WriteLine("----------------------------------------------------------------------");
+                    PLog.WriteLine("--------------------------------------------");
                     return;
                 case "seterrorlogpath":
                     if (parameters.Count == 2)
@@ -977,7 +1019,7 @@ namespace ErcXdbg
                         PLog.WriteLine("Error incorrect number of arguments. Use ERC --config SetErrorLogPath <PATH>");
                     }
                     //return core.SystemErrorLogPath;
-                    PLog.WriteLine("----------------------------------------------------------------------");
+                    PLog.WriteLine("--------------------------------------------");
                     return;
                 case "setstandardpattern":
                     if (parameters.Count == 2)
@@ -995,7 +1037,7 @@ namespace ErcXdbg
                         PLog.WriteLine("Error incorrect number of arguments. Use ERC --config SetStandardPattern <PATH>");
                     }
                     //return core.PatternStandardPath;
-                    PLog.WriteLine("----------------------------------------------------------------------");
+                    PLog.WriteLine("--------------------------------------------");
                     return;
                 case "setextendedpattern":
                     if (parameters.Count == 2)
@@ -1013,12 +1055,18 @@ namespace ErcXdbg
                         PLog.WriteLine("Error incorrect number of arguments. Use ERC --config SetExtendedPattern <PATH>");
                     }
                     //return core.PatternExtendedPath;
-                    PLog.WriteLine("----------------------------------------------------------------------");
+                    PLog.WriteLine("--------------------------------------------");
                     return;
                 default:
-                    PrintHelp("A syntax error was encountered when parsing the config command. Please review the documentation");
+                    PLog.WriteLine("Configuration Settings:");
+                    PLog.WriteLine("Working Directory = {0}", core.WorkingDirectory);
+                    PLog.WriteLine("ERC Version = {0}", core.ErcVersion);
+                    PLog.WriteLine("Author = {0}", core.Author);
+                    PLog.WriteLine("Error Log File = {0}", core.SystemErrorLogPath);
+                    PLog.WriteLine("Standard Pattern Location = {0}", core.PatternStandardPath);
+                    PLog.WriteLine("Standard Pattern Location = {0}", core.PatternExtendedPath);
                     //return null;
-                    PLog.WriteLine("----------------------------------------------------------------------");
+                    PLog.WriteLine("--------------------------------------------");
                     return;
             }
         }
@@ -1587,7 +1635,64 @@ namespace ErcXdbg
                 PLog.WriteLine(s);
             }
         }
-        
+
+        private static void SearchModules(ERC.ProcessInfo info, List<string> parameters)
+        {
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                if (parameters[i].Contains("--"))
+                {
+                    parameters.Remove(parameters[i]);
+                }
+            }
+
+            int searchType = 0;
+            string searchString = "";
+
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                if (parameters[i] == "0" || parameters[i] == "1" || parameters[i] == "2" ||
+                    parameters[i] == "3" || parameters[i] == "4" || parameters[i] == "5")
+                {
+                    searchType = Int32.Parse(parameters[i]);
+                    parameters.Remove(parameters[i]);
+                    i--;
+                }
+            }
+
+            List<string> includedModules = new List<string>();
+
+            foreach(string s in parameters)
+            {
+                bool hex = true;
+                foreach(char c in s)
+                {
+                    if(!(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') && !(c >= 'A' && c <= 'F'))
+                    {
+                        hex = false;
+                    }
+                }
+                if(hex == false)
+                {
+                    includedModules.Add(s);
+                    parameters.Remove(s);
+                }
+            }
+
+            if (includedModules.Count <= 0)
+            {
+                includedModules = null;
+            }
+
+            searchString = string.Join("", parameters);
+            var output = ERC.DisplayOutput.SearchModules(info, searchType, searchString, Globals.aslr, Globals.safeseh, Globals.rebase, Globals.nxcompat,
+                Globals.osdll, Globals.bytes, includedModules, Globals.protection);
+            foreach (string s in output)
+            {
+                PLog.WriteLine(s);
+            }
+        }
+
         private static void DumpMemory(ERC.ProcessInfo info, List<string> parameters)
         {
             for (int i = 0; i < parameters.Count; i++)
@@ -1618,15 +1723,7 @@ namespace ErcXdbg
                 values[i] = System.Convert.ToInt64(parameters[i], 16);
             }
 
-            ERC.ErcResult<string> result = ERC.DisplayOutput.DumpMemory(info, (IntPtr)values[0], (int)values[1]);
-            if(result.Error == null)
-            {
-                PLog.WriteLine(result.ReturnValue);
-            }
-            else
-            {
-                PrintHelp(result.Error.Message);
-            }
+            PLog.WriteLine(ERC.DisplayOutput.DumpMemory(info, (IntPtr)values[0], (int)values[1]));
         }
 
         private static void SEH(List<string> parameters, ERC.ProcessInfo info) 
@@ -1652,22 +1749,22 @@ namespace ErcXdbg
             {
                 if(Globals.encode == Encoding.Unicode)
                 {
-                    sehJumpAddresses = ERC.DisplayOutput.GetSEHJumpsUnicode(info, aslr, safeseh, rebase, nxcompat, osdll, Globals.bytes, Globals.protection);
+                    sehJumpAddresses = ERC.DisplayOutput.GetSEHJumpsUnicode(info, aslr, safeseh, rebase, nxcompat, osdll, Globals.bytes, Globals.protection).ToList();
                 }
                 else
                 {
-                    sehJumpAddresses = ERC.DisplayOutput.GetSEHJumps(info, aslr, safeseh, rebase, nxcompat, osdll, Globals.bytes, Globals.protection);
+                    sehJumpAddresses = ERC.DisplayOutput.GetSEHJumps(info, aslr, safeseh, rebase, nxcompat, osdll, Globals.bytes, Globals.protection).ToList();
                 }
             }
             else
             {
                 if (Globals.encode == Encoding.Unicode)
                 {
-                    sehJumpAddresses = ERC.DisplayOutput.GetSEHJumpsUnicode(info, aslr, safeseh, rebase, nxcompat, osdll, null, Globals.protection);
+                    sehJumpAddresses = ERC.DisplayOutput.GetSEHJumpsUnicode(info, aslr, safeseh, rebase, nxcompat, osdll, null, Globals.protection).ToList();
                 }
                 else
                 {
-                    sehJumpAddresses = ERC.DisplayOutput.GetSEHJumps(info, aslr, safeseh, rebase, nxcompat, osdll, null, Globals.protection);
+                    sehJumpAddresses = ERC.DisplayOutput.GetSEHJumps(info, aslr, safeseh, rebase, nxcompat, osdll, null, Globals.protection).ToList();
                 } 
             }
 
@@ -1694,7 +1791,7 @@ namespace ErcXdbg
             }
 
             List<string> nrpInfo = new List<string>();
-            nrpInfo = ERC.DisplayOutput.GenerateFindNRPTable(info, (int)Globals.encode, Globals.extended);
+            nrpInfo = ERC.DisplayOutput.GenerateFindNRPTable(info, (int)Globals.encode, Globals.extended).ToList();
 
             foreach (string s in nrpInfo)
             {
@@ -1704,13 +1801,152 @@ namespace ErcXdbg
             return;
         }
 
+        private static void HeapInfo(ERC.ProcessInfo info, List<string> parameters)
+        {
+            bool heapids = false;
+            bool dumpheap = false;
+            bool heapstats = false;
+            bool searchheap = false;
+
+            string hexStartAddress = "";
+            ulong heapID = 0;
+            bool writeToFile = true;
+            byte[] bytes = null;
+
+            ERC.HeapInfo hi = new ERC.HeapInfo(info);
+
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                if (parameters[i].Contains("--"))
+                {
+                    parameters.Remove(parameters[i]);
+                }
+            }
+
+            if (parameters.Count == 0)
+            {
+                heapstats = true;
+            }
+
+            for (int i = 0; i < parameters.Count && i >= 0; i++)
+            {
+                if (parameters[i].ToLower() == "ids")
+                {
+                    heapids = true;
+                    parameters.Remove(parameters[i]);
+                    i--;
+                }
+                else if (parameters[i].ToLower() == "stats")
+                {
+                    heapstats = true;
+                    parameters.Remove(parameters[i]);
+                    i--;
+                }
+                else if (parameters[i].ToLower() == "dump")
+                {
+                    dumpheap = true;
+                    parameters.Remove(parameters[i]);
+                    i--;
+                }
+                else if (parameters[i].ToLower() == "search")
+                {
+                    searchheap = true;
+                    parameters.Remove(parameters[i]);
+                    i--;
+                }
+                else if (parameters[i].ToLower() == "true" || parameters[i].ToLower() == "false")
+                {
+                    writeToFile = parameters[i].ToLower() == "true";
+                    parameters.Remove(parameters[i]);
+                    i--;
+                }
+                else if (parameters[i].ToLower() == "1" || parameters[i].ToLower() == "0")
+                {
+                    writeToFile = parameters[i].ToLower() == "1";
+                    parameters.Remove(parameters[i]);
+                    i--;
+                }
+                else if(ulong.TryParse(parameters[i].ToLower(), out heapID))
+                {
+                    parameters.Remove(parameters[i]);
+                    i--;
+                }
+                else if(Regex.IsMatch(parameters[i], @"\A\b[0-9a-fA-F]+\b\Z"))
+                {
+                    string searchString = string.Join("", parameters);
+                    if (hexStartAddress == "")
+                    {
+                        hexStartAddress = parameters[i];
+                        parameters.Remove(parameters[i]);
+                        i--;
+                    }
+                    else
+                    {
+                        bytes = ERC.Utilities.Convert.HexToBytes(searchString);
+                    }
+                }
+                else
+                {
+                    string searchString = string.Join("", parameters);
+                    bytes = StringToByteArray(searchString);
+                }
+            }
+
+            if (searchheap == true)
+            {
+                if(hexStartAddress != "" && bytes == null)
+                {
+                    bytes = ERC.Utilities.Convert.HexToBytes(hexStartAddress);
+                    hexStartAddress = "";
+                }
+
+                var result = ERC.DisplayOutput.SearchHeap(hi, bytes, heapID, hexStartAddress, writeToFile);
+                foreach (string s in result)
+                {
+                    PLog.Write(s);
+                }
+                PLog.Write(Environment.NewLine);
+            }
+
+            if (heapids == true)
+            {
+                foreach(string s in ERC.DisplayOutput.ListHeapIDs(hi))
+                {
+                    PLog.Write(s);
+                }
+                PLog.Write(Environment.NewLine);
+            }
+
+            if (heapstats == true)
+            {
+                var result = ERC.DisplayOutput.HeapStats(hi);
+                foreach (string s in result)
+                {
+                    PLog.Write(s);
+                }
+                PLog.Write(Environment.NewLine);
+            }
+
+            if(dumpheap == true)
+            {
+                var result = ERC.DisplayOutput.DumpHeap(hi, heapID, hexStartAddress, writeToFile);
+                foreach (string s in result)
+                {
+                    PLog.Write(s);
+                }
+                PLog.Write(Environment.NewLine);
+            }
+        }
+
         private static void rop(ERC.ProcessInfo info)
         {
+            PLog.WriteLine("This functionality is not yet implemented.");
+            /*
             ERC.Utilities.RopChainGenerator64 RCG = new ERC.Utilities.RopChainGenerator64(info);
             try
             {
                 PLog.WriteLine("Generating ROP chain files, this could take some time...");
-                RCG.GenerateRopChain64();             //Uncomment if 64 bit
+                //RCG.GenerateRopChain64();             //Uncomment if 64 bit
                 //RCG.GenerateRopChain32();             //Uncomment if 32 bit
                 PLog.WriteLine("ROP chain generation completed. Files can be found in {0}", info.WorkingDirectory);
             }
@@ -1723,6 +1959,7 @@ namespace ErcXdbg
                 RCG = null;
                 GC.Collect();
             }
+            */
             
             return;
         }
@@ -1784,6 +2021,7 @@ namespace ErcXdbg
             bool showArgs = false;
             bool showProcess = false;
             bool showSystem = false;
+            bool showConfig = false;
 
             foreach (string s in parameters)
             {
@@ -1804,6 +2042,7 @@ namespace ErcXdbg
                 showArgs = true;
                 showProcess = true;
                 showSystem = true;
+                showConfig = true;
             }
 
             for (int i = 0; i < parameters.Count && i >= 0; i++)
@@ -1911,6 +2150,12 @@ namespace ErcXdbg
                 PLog.WriteLine("DEBUG: Args ");
                 PLog.WriteLine("--------------------------------------------");
                 PLog.WriteLine("Args = {0}\n", string.Join(" ", arg.ToArray()));
+            }
+
+            if(showConfig == true)
+            {
+                List<string> nullParams = new List<string>();
+                Config(nullParams, info);
             }
         }
 
@@ -2027,6 +2272,26 @@ namespace ErcXdbg
                 PLog.WriteLine("--------------------------------------------");
                 PLog.WriteLine("Args = {0}\n", string.Join(" ", arg.ToArray()));
             }
+        }
+
+        private static void Reset(ERC.ProcessInfo info, List<string> parameters)
+        {
+            Globals.aslr = false;
+            Globals.safeseh = false;
+            Globals.rebase = false;
+            Globals.nxcompat = false;
+            Globals.osdll = false;
+            Globals.extended = false;
+            Globals.encode = Encoding.ASCII;
+            Globals.bytes = new byte[0];
+            Globals.protection = "read,write";
+
+            string path = Path.GetDirectoryName(Assembly.GetExecutingAssembly().CodeBase);
+            path = path.Replace("file:\\", "");
+            File.Delete(path + "ERC_Config.xml");
+
+            PLog.WriteLine("ERC Rests: All configuration settings have been reset to the default values.");
+            PLog.WriteLine("--------------------------------------------");
         }
     }
 }

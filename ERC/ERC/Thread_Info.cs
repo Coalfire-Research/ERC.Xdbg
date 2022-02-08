@@ -41,7 +41,7 @@ namespace ERC
         private ErcCore ThreadCore { get; set; }
         private ThreadBasicInformation ThreadBasicInfo = new ThreadBasicInformation();
         private TEB Teb;
-        private List<byte[]> SehChain;
+        private List<Tuple<byte[], byte[]>> SehChain;
         #endregion
 
         #region Constructor
@@ -80,7 +80,11 @@ namespace ERC
                 exceptionThrower.LogEvent();
             }
 
-            PopulateTEB();
+            var errorCheck = PopulateTEB(); //This needs to be revisited.
+            if (errorCheck.Error != null && errorCheck.Error.Message != "Error: No SEH chain has been generated yet. An SEH chain will not be generated until a crash occurs.")
+            {
+                throw errorCheck.Error;
+            }
         }
         #endregion
 
@@ -100,9 +104,9 @@ namespace ERC
                 try
                 {
                     bool returnVar = ErcCore.GetThreadContext64(ThreadHandle, ref Context64);
-                    if(returnVar == false)
+                    if (returnVar == false)
                     {
-                        throw new ERCException("Win32 Exception encountered when attempting to get thread context" + 
+                        throw new ERCException("Win32 Exception encountered when attempting to get thread context: " + 
                             new Win32Exception(Marshal.GetLastWin32Error()).Message);
                     }
                 }
@@ -127,7 +131,7 @@ namespace ERC
                     bool returnVar = ErcCore.Wow64GetThreadContext(ThreadHandle, ref Context32);
                     if (returnVar == false)
                     {
-                        throw new ERCException("Win32 Exception encountered when attempting to get thread context" +
+                        throw new ERCException("Win32 Exception encountered when attempting to get thread context: " +
                             new Win32Exception(Marshal.GetLastWin32Error()).Message);
                     }
                 }
@@ -184,8 +188,7 @@ namespace ERC
 
             if (retInt != 0)
             {
-                Console.WriteLine("NTSTATUS Error was thrown: " + retInt);
-                returnString.Error = new ERCException("NTSTATUS Error was thrown: " + retInt);
+                returnString.Error = new ERCException("NTSTATUS Error was thrown: 0x" + retInt.ToString("X"));
                 return returnString;
             }
 
@@ -206,8 +209,8 @@ namespace ERC
             if (ret == 0)
             {
                 ERCException e = new ERCException("System error: An error occured when executing ReadProcessMemory\n Process Handle = 0x" 
-                    + ThreadProcess.ProcessHandle.ToString("X") + " TEB Base Address = 0x" + ThreadBasicInfo.TebBaseAdress.ToString("X") + 
-                    " Return value = " + ret);
+                    + ThreadProcess.ProcessHandle.ToString("X") + "\nTEB Base Address = 0x" + ThreadBasicInfo.TebBaseAdress.ToString("X") +
+                    "\nWin32Error = " + Utilities.Win32Errors.GetLastWin32Error());
                 returnString.Error = e;
                 return returnString;
             }
@@ -356,10 +359,10 @@ namespace ERC
         #endregion
 
         #region BuildSehChain
-        internal ErcResult<List<byte[]>> BuildSehChain()
+        internal ErcResult<List<Tuple<byte[], byte[]>>> BuildSehChain()
         {
-            ErcResult<List<byte[]>> sehList = new ErcResult<List<byte[]>>(ThreadCore);
-            sehList.ReturnValue = new List<byte[]>();
+            ErcResult<List<Tuple<byte[], byte[]>>> sehList = new ErcResult<List<Tuple<byte[], byte[]>>>(ThreadCore);
+            sehList.ReturnValue = new List<Tuple<byte[], byte[]>>();
 
             if (Teb.Equals(default(TEB)))
             {
@@ -403,20 +406,25 @@ namespace ERC
             while (!sehEntry.SequenceEqual(sehFinal))
             {
                 byte[] reversedSehEntry = new byte[arraySize];
+                byte[] nSeh = new byte[arraySize];
+                byte[] sehHolder = new byte[arraySize * 2];
                 
                 int ret = 0;
 
                 if(X64 == MachineType.x64)
                 {
-                    ret = ErcCore.ReadProcessMemory(ThreadProcess.ProcessHandle, (IntPtr)BitConverter.ToInt64(sehEntry, 0), sehEntry, arraySize, out int retInt);
+                    ret = ErcCore.ReadProcessMemory(ThreadProcess.ProcessHandle, (IntPtr)BitConverter.ToInt64(sehEntry, 0), sehHolder, arraySize * 2, out int retInt);
+                    Array.Copy(sehHolder, 0, sehEntry, 0, arraySize);
+                    Array.Copy(sehHolder, arraySize, nSeh, 0, arraySize);
                 }
                 else
                 {
-                    ret = ErcCore.ReadProcessMemory(ThreadProcess.ProcessHandle, (IntPtr)BitConverter.ToInt32(sehEntry, 0), sehEntry, arraySize, out int retInt);
+                    ret = ErcCore.ReadProcessMemory(ThreadProcess.ProcessHandle, (IntPtr)BitConverter.ToInt32(sehEntry, 0), sehHolder, arraySize * 2, out int retInt);
+                    Array.Copy(sehHolder, 0, sehEntry, 0, arraySize);
+                    Array.Copy(sehHolder, arraySize, nSeh, 0, arraySize);
                 }
 
-
-                if(ret != 0 && ret != 1)
+                if (ret != 0 && ret != 1)
                 {
                     ERCException e = new ERCException("System error: An error occured when executing ReadProcessMemory\n Process Handle = 0x"
                     + ThreadProcess.ProcessHandle.ToString("X") + " TEB Current Seh = 0x" + Teb.CurrentSehFrame.ToString("X") +
@@ -425,6 +433,8 @@ namespace ERC
                     sehList.LogEvent();
                     return sehList;
                 }
+
+                Array.Reverse(nSeh);
 
                 for(int i = 0; i < sehEntry.Length; i++)
                 {
@@ -437,9 +447,10 @@ namespace ERC
                     sehEntry = new byte[sehFinal.Length];
                     Array.Copy(sehFinal, 0, sehEntry, 0, sehFinal.Length);
                 }
-                else if (!sehEntry.SequenceEqual(sehFinal) && !sehList.ReturnValue.Contains(reversedSehEntry))
+                else if (!sehEntry.SequenceEqual(sehFinal) && !sehList.ReturnValue.Any(e => e.Item1.SequenceEqual(reversedSehEntry)))
                 {
-                    sehList.ReturnValue.Add(reversedSehEntry);
+                    Tuple<byte[], byte[]> tuple = new Tuple<byte[], byte[]>(reversedSehEntry, nSeh);
+                    sehList.ReturnValue.Add(tuple);
                 }
 
                 if (pattern_standard.Contains(Encoding.Unicode.GetString(reversedSehEntry)) ||
@@ -481,7 +492,7 @@ namespace ERC
                 Array.Copy(reversedSehEntry, 0, prevSEH, 0, reversedSehEntry.Length);
             }
 
-            SehChain = new List<byte[]>(sehList.ReturnValue.ToList());
+            SehChain = new List<Tuple<byte[], byte[]>>(sehList.ReturnValue);
             return sehList;
         }
         #endregion
@@ -493,9 +504,9 @@ namespace ERC
         /// Gets the current SEH chain for the process.
         /// </summary>
         /// <returns>Returns a list of IntPtr containing the SEH chain</returns>
-        public List<IntPtr> GetSehChain()
+        public List<Tuple<IntPtr, IntPtr>> GetSehChain()
         {
-            List<IntPtr> SehPtrs = new List<IntPtr>();
+            List<Tuple<IntPtr, IntPtr>> SehPtrs = new List<Tuple<IntPtr, IntPtr>>();
             var pteb = PopulateTEB();
             if (pteb.Error != null)
             {
@@ -507,23 +518,20 @@ namespace ERC
                 throw new Exception("Error: No SEH chain has been generated yet. An SEH chain will not be generated until a crash occurs.");
             }
 
-            if(SehChain.Count == 0)
-            {
-                throw new Exception("Error: No SEH chain has been generated yet. An SEH chain will not be generated until a crash occurs.");
-            }
-
             if(X64 == MachineType.x64)
             {
                 for (int i = 0; i < SehChain.Count; i++)
                 {
-                    SehPtrs.Add((IntPtr)BitConverter.ToInt64(SehChain[i], 0));
+                    Tuple<IntPtr, IntPtr> tuple = new Tuple<IntPtr, IntPtr>((IntPtr)BitConverter.ToInt64(SehChain[i].Item1, 0), (IntPtr)BitConverter.ToInt64(SehChain[i].Item2, 0));
+                    SehPtrs.Add(tuple);
                 }
             }
             else
             {
                 for (int i = 0; i < SehChain.Count; i++)
                 {
-                    SehPtrs.Add((IntPtr)BitConverter.ToInt32(SehChain[i], 0));
+                    Tuple<IntPtr, IntPtr> tuple = new Tuple<IntPtr, IntPtr>((IntPtr)BitConverter.ToInt32(SehChain[i].Item1, 0), (IntPtr)BitConverter.ToInt32(SehChain[i].Item2, 0));
+                    SehPtrs.Add(tuple);
                 }
             }
             return SehPtrs;
