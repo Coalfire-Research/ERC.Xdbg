@@ -1133,13 +1133,14 @@ namespace ERC
         {
             List<string> output = new List<string>();
             byte[] memoryRegion = new byte[byteArray.Length];
+            List<byte> mismatchingBytes = new List<byte>();
             int bytesRead = 0;
             output.Add("                   ----------------------------------------------------");
-            string fromArray  = "        From Array | ";
-            string fromRegion = "From Memory Region | "; 
+            string fromArray = "        From Array | ";
+            string fromRegion = "From Memory Region | ";
             ErcCore.ReadProcessMemory(info.ProcessHandle, startAddress, memoryRegion, byteArray.Length, out bytesRead);
             int counter = 0;
-            for(int i = 0; i <= byteArray.Length; i++)
+            for (int i = 0; i <= byteArray.Length; i++)
             {
                 if (i == byteArray.Length)
                 {
@@ -1167,18 +1168,34 @@ namespace ERC
                         fromArray = "        From Array | ";
                         fromRegion = "From Memory Region | ";
                     }
+
                     byte[] thisByte = new byte[1];
                     thisByte[0] = byteArray[i];
-                    fromArray += BitConverter.ToString(thisByte);
-                    fromArray += " ";
+                    if (byteArray[i] != memoryRegion[i])
+                    {
+                        mismatchingBytes.Add(byteArray[i]);
+                        fromArray += BitConverter.ToString(thisByte);
+                        thisByte[0] = memoryRegion[i];
+                        fromRegion += BitConverter.ToString(thisByte);
+                    }
+                    else
+                    {
+                        fromArray += BitConverter.ToString(thisByte);
+                        thisByte[0] = memoryRegion[i];
+                        fromRegion += BitConverter.ToString(thisByte);
+                    }
 
-                    thisByte[0] = memoryRegion[i];
-                    fromRegion += BitConverter.ToString(thisByte);
+                    fromArray += " ";
                     fromRegion += " ";
                     counter++;
                 }
             }
             output.Add("                   ----------------------------------------------------");
+            output.Add("Mismatching Bytes: [" + String.Join(", ", mismatchingBytes.Select(b => BitConverter.ToString(new byte[] { b }))) + "]");
+            if (mismatchingBytes.Count > 0)
+            {
+                output.Add("Remove byte 0x" + BitConverter.ToString(new byte[] { mismatchingBytes.ElementAt(0) }) + " and attempt again.");
+            }
             return output.ToArray();
         }
         #endregion
@@ -1344,7 +1361,7 @@ namespace ERC
             string curatedGadgetsPath = GetFilePath(rcg.RcgInfo.WorkingDirectory, "curated_gadgest_", ".txt");
             string ropChainPath = GetFilePath(rcg.RcgInfo.WorkingDirectory, "rop_chain_", ".txt");
 
-            output += "-------------------------------------------------------------------------------------------------------------------------" + Environment.NewLine;
+            output += "------------------------------------------------------------------------------------------------------------------------" + Environment.NewLine;
             if (rcg.RcgInfo.Author != "No_Author_Set")
             {
                 output += "Process Name: " + rcg.RcgInfo.ProcessName + " Gadget list created by: " + rcg.RcgInfo.Author + " " + Environment.NewLine;
@@ -1353,7 +1370,7 @@ namespace ERC
             {
                 output += "Process Name: " + rcg.RcgInfo.ProcessName + " ROP chain gadget list" + Environment.NewLine;
             }
-            output += "-------------------------------------------------------------------------------------------------------------------------" + Environment.NewLine;
+            output += "------------------------------------------------------------------------------------------------------------------------" + Environment.NewLine;
 
             totalGadgets.Add(output);
             curatedGadgets.Add(output);
@@ -1953,17 +1970,94 @@ namespace ERC
             File.WriteAllLines(totalGadgetsPath, totalGadgets);
             File.WriteAllLines(curatedGadgetsPath, curatedGadgets);
 
-            if(gadgetsOnly == false)
+            List<string> ropChain = new List<string>();
+            if (gadgetsOnly == false)
             {
-                List<string> ropChain = new List<string>();
+                if(rcg.VirtualAllocChain.Count > 0)
+                {
+                    ropChain.Add("------------------------------------------------------------------------------------------------------------------------");
+                    ropChain.Add("Method: VirtualAlloc Process Name: " + rcg.RcgInfo.ProcessName);
+                    ropChain.Add("------------------------------------------------------------------------------------------------------------------------");
+                    ropChain.Add("");
+                    ropChain.Add("################################################################");
+                    ropChain.Add("## VirtualAlloc Template:                                     ##");
+                    ropChain.Add("## EAX: 90909090 -> Nop sled                                  ##");
+                    ropChain.Add("## ECX: 00000040 -> flProtect                                 ##");
+                    ropChain.Add("## EDX: 00001000 -> flAllocationType                          ##");
+                    ropChain.Add("## EBX: ???????? -> Int size (area to be set as executable)   ##");
+                    ropChain.Add("## ESP: ???????? -> No Change                                 ##");
+                    ropChain.Add("## EBP: ???????? -> Jmp Esp # Call Esp                        ##");
+                    ropChain.Add("## ESI: ???????? -> ApiAddresses[\"VirtualAlloc\"]              ##");
+                    ropChain.Add("## EDI: ???????? -> RopNop                                    ##");
+                    ropChain.Add("##                                                            ##");
+                    ropChain.Add("## + place ptr to \"jmp esp\" on stack, below PUSHAD            ##");
+                    ropChain.Add("################################################################");
+                    ropChain.Add("");
+
+                }
                 foreach (Tuple<byte[], string> k in rcg.VirtualAllocChain)
                 {
                     ropChain.Add(BitConverter.ToString(k.Item1).Replace("-", "\\x") + " | " + k.Item2);
                 }
+                ropChain.Add(Environment.NewLine);
+
+                if (rcg.HeapCreateChain.Count > 0) 
+                { 
+                
+                    ropChain.Add("------------------------------------------------------------------------------------------------------------------------");
+                    ropChain.Add("Method: HeapCreate Process Name: " + rcg.RcgInfo.ProcessName);
+                    ropChain.Add("------------------------------------------------------------------------------------------------------------------------");
+                    ropChain.Add("");
+                    ropChain.Add("################################################################");
+                    ropChain.Add("## HeapCreate Template:                                       ##");
+                    ropChain.Add("## EAX: 90909090 -> Nop sled                                  ##");
+                    ropChain.Add("## ECX: 00010000 -> dwMaximumSize                             ##");
+                    ropChain.Add("## EDX: 00001000 -> dwInitialSize                             ##");
+                    ropChain.Add("## EBX: 00040000 -> flOptions                                 ##");
+                    ropChain.Add("## ESP: ???????? -> No Change                                 ##");
+                    ropChain.Add("## EBP: ???????? -> Jmp Esp # Call Esp                        ##");
+                    ropChain.Add("## ESI: ???????? -> ApiAddresses[\"HeapCreate\"]                ##");
+                    ropChain.Add("## EDI: ???????? -> RopNop                                    ##");
+                    ropChain.Add("################################################################");
+                    ropChain.Add("");
+                }
+                foreach (Tuple<byte[], string> k in rcg.HeapCreateChain)
+                {
+                    ropChain.Add(BitConverter.ToString(k.Item1).Replace("-", "\\x") + " | " + k.Item2);
+                }
+                ropChain.Add(Environment.NewLine);
+
+                if (rcg.VirtualProtectChain.Count > 0)
+                {
+                    ropChain.Add("------------------------------------------------------------------------------------------------------------------------");
+                    ropChain.Add("Method: VirtualProtect Process Name: " + rcg.RcgInfo.ProcessName);
+                    ropChain.Add("------------------------------------------------------------------------------------------------------------------------");
+                    ropChain.Add("");
+                    ropChain.Add("################################################################");
+                    ropChain.Add("## VirtualProtect Template:                                   ##");
+                    ropChain.Add("## EAX: 90909090 -> Nop sled                                  ##");
+                    ropChain.Add("## ECX: ???????? -> flAllocationType                          ##");
+                    ropChain.Add("## EDX: 00000040 -> flNewProtect                              ##");
+                    ropChain.Add("## EBX: ???????? -> Int size (area to be set as executable)   ##");
+                    ropChain.Add("## ESP: ???????? -> No Change                                 ##");
+                    ropChain.Add("## EBP: ???????? -> Jmp Esp # Call Esp                        ##");
+                    ropChain.Add("## ESI: ???????? -> ApiAddresses[\"VirtualProtect\"]            ##");
+                    ropChain.Add("## EDI: ???????? -> RopNop                                    ##");
+                    ropChain.Add("##                                                            ##");
+                    ropChain.Add("## + place ptr to \"jmp esp\" on stack, below PUSHAD            ##");
+                    ropChain.Add("################################################################");
+                    ropChain.Add("");
+                }
+                foreach (Tuple<byte[], string> k in rcg.VirtualProtectChain)
+                {
+                    ropChain.Add(BitConverter.ToString(k.Item1).Replace("-", "\\x") + " | " + k.Item2);
+                }
+                ropChain.Add(Environment.NewLine);
+
                 File.WriteAllLines(ropChainPath, ropChain);
             }
 
-            return totalGadgets.ToArray();
+            return ropChain.ToArray();
         }
         #endregion
 
